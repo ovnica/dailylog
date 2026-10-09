@@ -1,0 +1,6 @@
+{
+  "name": "Lazuardi Workload Journal & Faculty Activity Tracker",
+  "description": "Professional academic workload journal with spreadsheet-style logging, weekly completion analytics, follow-up tracking, principal review, and PDF reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
