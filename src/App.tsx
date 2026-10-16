@@ -60,6 +60,14 @@ export default function App() {
     followUpFilter: 'all',
   });
 
+  // Ensure all previous historical entries are loaded on mount
+  useEffect(() => {
+    const recovered = getStoredEntries();
+    if (recovered && recovered.length > 0) {
+      setEntries(recovered);
+    }
+  }, []);
+
   // Persist entries on change
   useEffect(() => {
     saveStoredEntries(entries);
@@ -396,7 +404,20 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                const recovered = getStoredEntries();
+                setEntries(recovered);
+                showToast(`Riwayat aktivitas berhasil dipulihkan (${recovered.length} entri ditemukan).`, 'success');
+              }}
+              className="text-blue-600 hover:text-blue-800 flex items-center gap-1 font-semibold hover:underline cursor-pointer"
+              title="Pulihkan entri aktivitas sebelumnya dari memori peramban"
+            >
+              <RotateCcw className="w-3 h-3 text-blue-600" />
+              <span>Pulihkan Riwayat Input</span>
+            </button>
+            <span className="text-slate-300">|</span>
             <button
               onClick={handleResetData}
               className="text-slate-500 hover:text-slate-800 flex items-center gap-1 hover:underline cursor-pointer"

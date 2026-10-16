@@ -33,14 +33,20 @@ export const USER_PROFILES: Record<string, UserProfile> = {
   },
 };
 
-const STORAGE_KEY = 'lazuardi_activity_log_v4';
+const PRIMARY_STORAGE_KEY = 'lazuardi_activity_log_v4';
+const HISTORICAL_STORAGE_KEYS = [
+  'lazuardi_workload_journal_v3_simple',
+  'lazuardi_workload_journal_v2',
+  'lazuardi_workload_journal',
+  'lazuardi_activity_log_v4',
+];
 const ACTIVE_USER_KEY = 'lazuardi_active_user_persona';
 
-// Seed data with entries for Today (2026-10-15), Yesterday (2026-10-14), This Week, and earlier
+// Baseline seed data (including LZ series and recent dates)
 const INITIAL_ENTRIES: JournalEntry[] = [
   {
     id: 'AL-2026-010',
-    date: '2026-10-15', // TODAY
+    date: '2026-10-15',
     title: 'Grade 8 Science Practical Lab: Photosynthesis & Chloroplast Exploration',
     description: 'Prepared lab stations, microscopes, and iodine reagent safety protocols for 28 students. Supervised experiential inquiry session.',
     status: 'Completed',
@@ -57,7 +63,7 @@ const INITIAL_ENTRIES: JournalEntry[] = [
   },
   {
     id: 'AL-2026-011',
-    date: '2026-10-15', // TODAY
+    date: '2026-10-15',
     title: 'Science Fair Booth Equipment Verification & Safety Checklist',
     description: 'Inspected power extensions, display boards, and table allocations for 14 student project groups in the auditorium.',
     status: 'In Progress',
@@ -73,7 +79,7 @@ const INITIAL_ENTRIES: JournalEntry[] = [
   },
   {
     id: 'AL-2026-012',
-    date: '2026-10-14', // YESTERDAY
+    date: '2026-10-14',
     title: 'Mid-Semester Summative Assessment Blueprint & Rubric Alignment',
     description: 'Formulated Cambridge checkpoint aligned physics & biology questions, including Bloom taxonomy differentiation for higher-order thinking.',
     status: 'In Progress',
@@ -89,7 +95,7 @@ const INITIAL_ENTRIES: JournalEntry[] = [
   },
   {
     id: 'AL-2026-013',
-    date: '2026-10-14', // YESTERDAY
+    date: '2026-10-14',
     title: 'Weekly Department Coordination with Principal Sari',
     description: 'Attended faculty sync to review Q4 interdisciplinary STEM activities, student character reports, and teacher peer observation schedules.',
     status: 'Completed',
@@ -105,8 +111,8 @@ const INITIAL_ENTRIES: JournalEntry[] = [
     updatedAt: '2026-10-14T16:00:00Z',
   },
   {
-    id: 'AL-2026-014',
-    date: '2026-10-13', // THIS WEEK
+    id: 'LZ-2026-003',
+    date: '2026-10-13',
     title: 'Pastoral Advisory & Student Character Development (Budi Pekerti)',
     description: 'Individual pastoral counseling with 4 Grade 8 advisory students regarding academic resilience and collaborative peer projects.',
     status: 'Completed',
@@ -122,8 +128,8 @@ const INITIAL_ENTRIES: JournalEntry[] = [
     updatedAt: '2026-10-13T17:10:00Z',
   },
   {
-    id: 'AL-2026-015',
-    date: '2026-10-12', // THIS WEEK
+    id: 'LZ-2026-005',
+    date: '2026-10-12',
     title: 'Grading Formative Quizzes & Diagnostic Feedback on Cellular Respiration',
     description: 'Evaluated 52 student formative quiz submissions. Provided personalized margin comments and marked misconceptions.',
     status: 'Completed',
@@ -139,8 +145,8 @@ const INITIAL_ENTRIES: JournalEntry[] = [
     updatedAt: '2026-10-13T09:00:00Z',
   },
   {
-    id: 'AL-2026-016',
-    date: '2026-10-08', // EARLIER RECORD
+    id: 'LZ-2026-006',
+    date: '2026-10-08',
     title: 'School Accreditation & Digital Portfolio Documentation Compilation',
     description: 'Organized syllabus evidence, student exemplar works, and lesson reflection logs for institutional academic review.',
     status: 'In Progress',
@@ -155,8 +161,8 @@ const INITIAL_ENTRIES: JournalEntry[] = [
     updatedAt: '2026-10-08T12:00:00Z',
   },
   {
-    id: 'AL-2026-017',
-    date: '2026-10-05', // EARLIER RECORD
+    id: 'LZ-2026-007',
+    date: '2026-10-05',
     title: 'Professional Learning Community (PLC): Inquiry-Based Learning Strategies',
     description: 'Participated in regional webinar on multi-tiered instructional scaffolding and peer learning mechanics.',
     status: 'Completed',
@@ -172,8 +178,8 @@ const INITIAL_ENTRIES: JournalEntry[] = [
     updatedAt: '2026-10-06T08:30:00Z',
   },
   {
-    id: 'AL-2026-018',
-    date: '2026-10-04', // EARLIER RECORD
+    id: 'LZ-2026-008',
+    date: '2026-10-04',
     title: 'Extracurricular Robotics & Young Scientist Club Coaching',
     description: 'Guided 15 club members on sensor integration and programming basic line-follower rovers for upcoming exhibition.',
     status: 'Completed',
@@ -190,27 +196,89 @@ const INITIAL_ENTRIES: JournalEntry[] = [
   },
 ];
 
+/**
+ * Retrieves stored entries by aggregating from historical storage keys
+ * so that any routine entries the user previously created or edited are recovered.
+ */
 export function getStoredEntries(): JournalEntry[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      saveStoredEntries(INITIAL_ENTRIES);
-      return INITIAL_ENTRIES;
+    const entryMap = new Map<string, JournalEntry>();
+
+    // 1. First, seed baseline entries into the map
+    INITIAL_ENTRIES.forEach((entry) => {
+      entryMap.set(entry.id, entry);
+    });
+
+    // 2. Scan all historical keys from oldest to newest so user's actual stored data takes precedence
+    HISTORICAL_STORAGE_KEYS.forEach((key) => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item: any) => {
+              if (item && item.id && item.title) {
+                // Sanitize entry to match JournalEntry structure
+                const cleanEntry: JournalEntry = {
+                  id: String(item.id),
+                  date: String(item.date || '2026-10-15'),
+                  title: String(item.title),
+                  description: String(item.description || ''),
+                  status: item.status || 'In Progress',
+                  progressPercent: typeof item.progressPercent === 'number' ? item.progressPercent : 50,
+                  followUpPlan: String(item.followUpPlan || ''),
+                  followUpDeadline: item.followUpDeadline ? String(item.followUpDeadline) : undefined,
+                  followUpDone: Boolean(item.followUpDone),
+                  priority: item.priority || 'Normal',
+                  principalFeedback: item.principalFeedback ? String(item.principalFeedback) : undefined,
+                  principalApproved: Boolean(item.principalApproved),
+                  principalApprovedAt: item.principalApprovedAt ? String(item.principalApprovedAt) : undefined,
+                  createdAt: item.createdAt || new Date().toISOString(),
+                  updatedAt: item.updatedAt || new Date().toISOString(),
+                };
+
+                // Store or overwrite with the user's stored data
+                entryMap.set(cleanEntry.id, cleanEntry);
+              }
+            });
+          }
+        }
+      } catch (keyErr) {
+        console.warn(`Could not read storage key: ${key}`, keyErr);
+      }
+    });
+
+    const merged = Array.from(entryMap.values()).sort((a, b) => {
+      return b.date.localeCompare(a.date);
+    });
+
+    if (merged.length > 0) {
+      // Save unified list back across keys for full safety
+      saveStoredEntries(merged);
+      return merged;
     }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
+
     return INITIAL_ENTRIES;
   } catch (err) {
-    console.error('Failed to load activity log entries from storage', err);
+    console.error('Failed to restore activity log entries from storage', err);
     return INITIAL_ENTRIES;
   }
 }
 
+/**
+ * Saves entries to both primary and legacy keys for maximum redundancy
+ */
 export function saveStoredEntries(entries: JournalEntry[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    const serialized = JSON.stringify(entries);
+    localStorage.setItem(PRIMARY_STORAGE_KEY, serialized);
+
+    // Also mirror to legacy keys so switching versions never loses data
+    HISTORICAL_STORAGE_KEYS.forEach((k) => {
+      if (k !== PRIMARY_STORAGE_KEY) {
+        localStorage.setItem(k, serialized);
+      }
+    });
   } catch (err) {
     console.error('Failed to save activity log entries', err);
   }
