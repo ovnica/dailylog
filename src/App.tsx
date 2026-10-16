@@ -23,9 +23,13 @@ import {
   getActiveUser,
   setActiveUser,
   resetToSeedEntries,
-  fetchEntriesFromServer,
-  syncEntriesToServer,
 } from './utils/storage';
+import {
+  subscribeToCloudActivities,
+  saveActivityToCloud,
+  deleteActivityFromCloud,
+  syncAllActivitiesToCloud,
+} from './utils/firebaseStorage';
 import { decodeEntriesFromUrl } from './utils/shareUrl';
 import { exportWorkloadCSV } from './utils/pdfExport';
 import {
@@ -63,44 +67,56 @@ export default function App() {
     followUpFilter: 'all',
   });
 
-  // Handle URL share payload and background server synchronization on mount
+  // Handle Real-time Firestore Database Synchronization on mount
   useEffect(() => {
-    // 1. Check if the URL contains shared activity entries (e.g. from Ovnica's shared link)
+    // 1. Check if the URL contains shared activity entries
     const sharedFromUrl = decodeEntriesFromUrl();
     if (sharedFromUrl && sharedFromUrl.length > 0) {
       setEntries(sharedFromUrl);
       saveStoredEntries(sharedFromUrl);
-      syncEntriesToServer(sharedFromUrl);
+      syncAllActivitiesToCloud(sharedFromUrl);
       showToast(
-        `Berhasil memuat ${sharedFromUrl.length} catatan aktivitas dari tautan yang dibagikan!`,
+        `Memuat ${sharedFromUrl.length} catatan aktivitas dari tautan dan menyinkronkan ke Cloud!`,
         'success'
       );
-      // Clean hash without reloading so URL is friendly
       try {
         const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
         window.history.replaceState(null, '', cleanUrl);
       } catch (e) {
         // ignore
       }
-      return;
     }
 
-    // 2. Otherwise, check local storage
-    const recovered = getStoredEntries();
-    if (recovered && recovered.length > 0) {
-      setEntries(recovered);
-    }
-
-    // 3. Asynchronously fetch latest entries from server
-    fetchEntriesFromServer().then((serverEntries) => {
-      if (serverEntries && serverEntries.length > 0) {
-        setEntries(serverEntries);
-        saveStoredEntries(serverEntries);
+    // 2. Subscribe to real-time Cloud Firestore updates
+    const unsubscribe = subscribeToCloudActivities(
+      (cloudEntries) => {
+        if (cloudEntries && cloudEntries.length > 0) {
+          setEntries(cloudEntries);
+          saveStoredEntries(cloudEntries);
+          setSyncTimestamp(
+            new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          );
+        } else {
+          // If cloud is initially empty, push Ovnica's existing local activities up to the cloud!
+          const localEntries = getStoredEntries();
+          if (localEntries && localEntries.length > 0) {
+            syncAllActivitiesToCloud(localEntries).then(() => {
+              setEntries(localEntries);
+            });
+          }
+        }
+      },
+      (err) => {
+        console.warn('Firestore offline fallback:', err);
       }
-    });
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
-  // Persist entries on change
+  // Persist entries to local backup on change
   useEffect(() => {
     saveStoredEntries(entries);
   }, [entries]);
@@ -113,16 +129,14 @@ export default function App() {
     }, 3500);
   };
 
-  const handleTriggerSync = () => {
+  const handleTriggerSync = async () => {
     setIsSyncing(true);
-    syncEntriesToServer(entries);
-    setTimeout(() => {
-      setIsSyncing(false);
-      setSyncTimestamp(
-        new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      );
-      showToast('Activity log berhasil disinkronkan ke server cloud Lazuardi.', 'success');
-    }, 700);
+    await syncAllActivitiesToCloud(entries);
+    setIsSyncing(false);
+    setSyncTimestamp(
+      new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    );
+    showToast('Tersinkronisasi langsung dengan Cloud Firestore Lazuardi!', 'success');
   };
 
   const handleSwitchUser = (userId: string) => {
@@ -144,81 +158,80 @@ export default function App() {
     setIsEntryModalOpen(true);
   };
 
-  const handleSaveEntry = (entry: JournalEntry) => {
+  const handleSaveEntry = async (entry: JournalEntry) => {
     if (editingEntry) {
       setEntries((prev) => prev.map((e) => (e.id === entry.id ? entry : e)));
-      showToast(`Updated activity "${entry.title}"`, 'success');
+      showToast(`Perubahan aktivitas "${entry.title}" disimpan ke Cloud`, 'success');
     } else {
       setEntries((prev) => [entry, ...prev]);
-      showToast(`Logged new activity "${entry.title}"`, 'success');
+      showToast(`Aktivitas baru "${entry.title}" berhasil dicatat ke Cloud`, 'success');
     }
     setIsEntryModalOpen(false);
     setEditingEntry(null);
+
+    // Persist directly to Cloud Firestore
+    await saveActivityToCloud(entry);
   };
 
-  const handleDeleteEntry = (id: string) => {
+  const handleDeleteEntry = async (id: string) => {
     const target = entries.find((e) => e.id === id);
-    if (window.confirm(`Are you sure you want to delete "${target?.title || 'this entry'}"?`)) {
+    if (window.confirm(`Hapus aktivitas "${target?.title || 'ini'}" dari database cloud?`)) {
       setEntries((prev) => prev.filter((e) => e.id !== id));
-      showToast('Entry removed from journal ledger', 'info');
+      showToast('Aktivitas dihapus dari ledger', 'info');
+      await deleteActivityFromCloud(id);
     }
   };
 
-  const handleQuickUpdateStatus = (id: string, status: EntryStatus, progress: number) => {
-    setEntries((prev) =>
-      prev.map((e) =>
-        e.id === id
-          ? {
-              ...e,
-              status,
-              progressPercent: progress,
-              updatedAt: new Date().toISOString(),
-            }
-          : e
-      )
-    );
+  const handleQuickUpdateStatus = async (id: string, status: EntryStatus, progress: number) => {
+    const target = entries.find((e) => e.id === id);
+    if (target) {
+      const updated = {
+        ...target,
+        status,
+        progressPercent: progress,
+        updatedAt: new Date().toISOString(),
+      };
+      setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
+      await saveActivityToCloud(updated);
+    }
   };
 
-  const handleToggleFollowupDone = (id: string) => {
-    setEntries((prev) =>
-      prev.map((e) => {
-        if (e.id === id) {
-          const newState = !e.followUpDone;
-          showToast(
-            newState
-              ? `Follow-up marked completed for "${e.title}"`
-              : `Follow-up reopened for "${e.title}"`,
-            'success'
-          );
-          return {
-            ...e,
-            followUpDone: newState,
-            updatedAt: new Date().toISOString(),
-          };
-        }
-        return e;
-      })
-    );
+  const handleToggleFollowupDone = async (id: string) => {
+    const target = entries.find((e) => e.id === id);
+    if (target) {
+      const newState = !target.followUpDone;
+      const updated = {
+        ...target,
+        followUpDone: newState,
+        updatedAt: new Date().toISOString(),
+      };
+      setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
+      showToast(
+        newState
+          ? `Tindak lanjut ditandai selesai untuk "${target.title}"`
+          : `Tindak lanjut dibuka kembali untuk "${target.title}"`,
+        'success'
+      );
+      await saveActivityToCloud(updated);
+    }
   };
 
-  const handlePrincipalApprove = (id: string, feedback?: string) => {
-    setEntries((prev) =>
-      prev.map((e) => {
-        if (e.id === id) {
-          showToast(`Official Principal Endorsement granted for "${e.title}"`, 'success');
-          return {
-            ...e,
-            principalApproved: true,
-            principalApprovedAt: new Date().toISOString(),
-            status: 'Approved by Principal',
-            progressPercent: 100,
-            principalFeedback: feedback || e.principalFeedback || 'Endorsed by Principal Ibu Sari.',
-            updatedAt: new Date().toISOString(),
-          };
-        }
-        return e;
-      })
-    );
+  const handlePrincipalApprove = async (id: string, feedback?: string) => {
+    const target = entries.find((e) => e.id === id);
+    if (target) {
+      const updated: JournalEntry = {
+        ...target,
+        principalApproved: true,
+        principalApprovedAt: new Date().toISOString(),
+        status: 'Approved by Principal',
+        progressPercent: 100,
+        principalFeedback: feedback || target.principalFeedback || 'Endorsed by Principal Ibu Sari.',
+        updatedAt: new Date().toISOString(),
+      };
+      setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
+      showToast(`Persetujuan & endorsement resmi Kepala Sekolah berhasil dicatat untuk "${target.title}"`, 'success');
+      await saveActivityToCloud(updated);
+    }
   };
 
   const handleResetData = () => {
