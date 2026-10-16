@@ -23,7 +23,10 @@ import {
   getActiveUser,
   setActiveUser,
   resetToSeedEntries,
+  fetchEntriesFromServer,
+  syncEntriesToServer,
 } from './utils/storage';
+import { decodeEntriesFromUrl } from './utils/shareUrl';
 import { exportWorkloadCSV } from './utils/pdfExport';
 import {
   CheckCircle2,
@@ -60,12 +63,41 @@ export default function App() {
     followUpFilter: 'all',
   });
 
-  // Ensure all previous historical entries are loaded on mount
+  // Handle URL share payload and background server synchronization on mount
   useEffect(() => {
+    // 1. Check if the URL contains shared activity entries (e.g. from Ovnica's shared link)
+    const sharedFromUrl = decodeEntriesFromUrl();
+    if (sharedFromUrl && sharedFromUrl.length > 0) {
+      setEntries(sharedFromUrl);
+      saveStoredEntries(sharedFromUrl);
+      syncEntriesToServer(sharedFromUrl);
+      showToast(
+        `Berhasil memuat ${sharedFromUrl.length} catatan aktivitas dari tautan yang dibagikan!`,
+        'success'
+      );
+      // Clean hash without reloading so URL is friendly
+      try {
+        const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
+        window.history.replaceState(null, '', cleanUrl);
+      } catch (e) {
+        // ignore
+      }
+      return;
+    }
+
+    // 2. Otherwise, check local storage
     const recovered = getStoredEntries();
     if (recovered && recovered.length > 0) {
       setEntries(recovered);
     }
+
+    // 3. Asynchronously fetch latest entries from server
+    fetchEntriesFromServer().then((serverEntries) => {
+      if (serverEntries && serverEntries.length > 0) {
+        setEntries(serverEntries);
+        saveStoredEntries(serverEntries);
+      }
+    });
   }, []);
 
   // Persist entries on change
@@ -83,12 +115,13 @@ export default function App() {
 
   const handleTriggerSync = () => {
     setIsSyncing(true);
+    syncEntriesToServer(entries);
     setTimeout(() => {
       setIsSyncing(false);
       setSyncTimestamp(
         new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       );
-      showToast('Journal synced with Lazuardi Cloud database and email servers.', 'success');
+      showToast('Activity log berhasil disinkronkan ke server cloud Lazuardi.', 'success');
     }, 700);
   };
 

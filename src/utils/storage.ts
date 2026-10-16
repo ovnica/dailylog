@@ -279,9 +279,41 @@ export function saveStoredEntries(entries: JournalEntry[]): void {
         localStorage.setItem(k, serialized);
       }
     });
+
+    // Asynchronously sync to server
+    syncEntriesToServer(entries);
   } catch (err) {
     console.error('Failed to save activity log entries', err);
   }
+}
+
+export async function syncEntriesToServer(entries: JournalEntry[]): Promise<boolean> {
+  try {
+    const res = await fetch('/api/entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data.success);
+  } catch (err) {
+    return false;
+  }
+}
+
+export async function fetchEntriesFromServer(): Promise<JournalEntry[] | null> {
+  try {
+    const res = await fetch('/api/entries');
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.success && Array.isArray(data.entries) && data.entries.length > 0) {
+      return data.entries;
+    }
+  } catch (err) {
+    // fallback
+  }
+  return null;
 }
 
 export function resetToSeedEntries(): JournalEntry[] {
