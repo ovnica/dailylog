@@ -23,7 +23,7 @@ function formatDate(date: Date): string {
 }
 
 export function getWeekBounds(referenceDateStr?: string, weekOffset: number = 0): { start: Date; end: Date; label: string } {
-  const base = referenceDateStr ? new Date(referenceDateStr) : new Date('2026-10-08');
+  const base = referenceDateStr ? new Date(referenceDateStr) : new Date('2026-10-15');
   base.setDate(base.getDate() + weekOffset * 7);
 
   // Determine Monday as start of academic week
@@ -50,7 +50,7 @@ export function getWeekBounds(referenceDateStr?: string, weekOffset: number = 0)
 export function calculateWeeklyStats(
   entries: JournalEntry[],
   weekOffset: number = 0,
-  referenceDateStr: string = '2026-10-08'
+  referenceDateStr: string = '2026-10-15'
 ): WeeklyStats {
   const { start, end, label } = getWeekBounds(referenceDateStr, weekOffset);
   const startStr = formatDate(start);
@@ -89,7 +89,7 @@ export function calculateWeeklyStats(
 
   const principalApprovedCount = weekEntries.filter((e) => e.principalApproved).length;
 
-  const todayStr = '2026-10-08';
+  const todayStr = '2026-10-15';
   const pendingFollowupCount = weekEntries.filter((e) => e.followUpPlan && !e.followUpDone).length;
   const overdueFollowupCount = weekEntries.filter(
     (e) => e.followUpPlan && !e.followUpDone && e.followUpDeadline && e.followUpDeadline < todayStr
@@ -115,7 +115,7 @@ export function getSmartProgressSummary(entry: JournalEntry): {
   badgeClass: string;
   isAttentionNeeded: boolean;
 } {
-  const todayStr = '2026-10-08';
+  const todayStr = '2026-10-15';
 
   if (entry.principalApproved) {
     return {

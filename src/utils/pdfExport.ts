@@ -50,7 +50,7 @@ export function exportWorkloadReportPDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(219, 234, 254);
-  doc.text('Faculty Academic Workload Journal & Progress Accountability Report', 36, 42);
+  doc.text('Faculty Activity Log & Progress Report', 36, 42);
 
   const timestamp = new Date().toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -206,7 +206,7 @@ export function exportWorkloadReportPDF(
   doc.setTextColor(textMuted);
   doc.text(`Principal & Academic Director (${meta.principalEmail})`, pageWidth - 260, signatureY + 58);
 
-  const filename = `Lazuardi_Workload_Journal_${new Date().toISOString().slice(0, 10)}.pdf`;
+  const filename = `Lazuardi_Activity_Log_${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(filename);
 }
 
@@ -254,7 +254,7 @@ export function exportWorkloadCSV(entries: JournalEntry[]): void {
   const encodedUri = encodeURI(csvContent);
   const link = document.createElement('a');
   link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `Lazuardi_Workload_Log_${new Date().toISOString().slice(0, 10)}.csv`);
+  link.setAttribute('download', `Lazuardi_Activity_Log_${new Date().toISOString().slice(0, 10)}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

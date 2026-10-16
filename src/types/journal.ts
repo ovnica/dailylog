@@ -43,6 +43,7 @@ export interface FilterOptions {
   search: string;
   status: string;
   priority: string;
-  dateRange: 'all' | 'today' | 'this_week' | 'last_week' | 'this_month';
+  dateRange: 'all' | 'this_week' | 'today' | 'yesterday' | 'custom_date';
+  selectedSpecificDate?: string; // for "pilih tanggal"
   followUpFilter: 'all' | 'has_followup' | 'pending_followup' | 'completed_followup';
 }

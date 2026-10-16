@@ -30,8 +30,19 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       status: 'all',
       priority: 'all',
       dateRange: 'all',
+      selectedSpecificDate: undefined,
       followUpFilter: 'all',
     });
+  };
+
+  const handleDateRangeChange = (value: FilterOptions['dateRange']) => {
+    setFilters((prev) => ({
+      ...prev,
+      dateRange: value,
+      // Default to today's date if switching to custom_date and none selected yet
+      selectedSpecificDate:
+        value === 'custom_date' ? prev.selectedSpecificDate || '2026-10-15' : prev.selectedSpecificDate,
+    }));
   };
 
   const hasActiveFilters =
@@ -42,7 +53,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     filters.followUpFilter !== 'all';
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs">
+    <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs space-y-2.5">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-center">
         {/* Search Input */}
         <div className="relative lg:col-span-2">
@@ -64,18 +75,18 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           )}
         </div>
 
-        {/* Date Range Selector */}
+        {/* Record / Date Selector: all records, this week, today, yesterday, atau pilih tanggal */}
         <div>
           <select
             value={filters.dateRange}
-            onChange={(e) => setFilters((prev) => ({ ...prev, dateRange: e.target.value as any }))}
-            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800"
+            onChange={(e) => handleDateRangeChange(e.target.value as FilterOptions['dateRange'])}
+            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800 font-medium cursor-pointer"
           >
-            <option value="all">📅 Date: All Records</option>
-            <option value="today">Today (Oct 8)</option>
-            <option value="this_week">This Academic Week</option>
-            <option value="last_week">Last Academic Week</option>
-            <option value="this_month">October 2026</option>
+            <option value="all">Record: All Records</option>
+            <option value="this_week">This Week</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="custom_date">Pilih Tanggal...</option>
           </select>
         </div>
 
@@ -84,9 +95,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           <select
             value={filters.status}
             onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800"
+            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800 cursor-pointer"
           >
-            <option value="all">⚡ Status: All Statuses</option>
+            <option value="all">Status: All Statuses</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -96,8 +107,32 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         </div>
       </div>
 
+      {/* When "Pilih Tanggal" is active, display the interactive date picker input */}
+      {filters.dateRange === 'custom_date' && (
+        <div className="flex items-center gap-2 p-2 bg-blue-50/70 border border-blue-200 rounded-lg text-xs animate-in fade-in duration-150">
+          <Calendar className="w-4 h-4 text-blue-700 shrink-0" />
+          <span className="font-semibold text-blue-900">Pilih Tanggal:</span>
+          <input
+            type="date"
+            value={filters.selectedSpecificDate || '2026-10-15'}
+            onChange={(e) =>
+              setFilters((prev) => ({
+                ...prev,
+                selectedSpecificDate: e.target.value,
+              }))
+            }
+            className="px-2.5 py-1 bg-white border border-blue-300 rounded text-xs text-slate-900 font-medium focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+          />
+          {filters.selectedSpecificDate && (
+            <span className="text-[11px] text-blue-800 font-medium">
+              Menampilkan entri untuk: <strong>{filters.selectedSpecificDate}</strong>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Sub-bar with quick toggle for follow-ups, reset, and counts */}
-      <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <button
             onClick={() =>

@@ -210,18 +210,18 @@ export default function App() {
         return false;
       }
 
-      // Date Range filter
-      if (filters.dateRange === 'today' && entry.date !== '2026-10-08') {
-        return false;
-      }
-      if (filters.dateRange === 'this_week') {
-        if (entry.date < '2026-10-05' || entry.date > '2026-10-11') return false;
-      }
-      if (filters.dateRange === 'last_week') {
-        if (entry.date < '2026-09-28' || entry.date > '2026-10-04') return false;
-      }
-      if (filters.dateRange === 'this_month' && !entry.date.startsWith('2026-10')) {
-        return false;
+      // Date Range filter: all records, this week, today, yesterday, atau pilih tanggal
+      if (filters.dateRange === 'today') {
+        const todayStr = '2026-10-15';
+        if (entry.date !== todayStr) return false;
+      } else if (filters.dateRange === 'yesterday') {
+        const yesterdayStr = '2026-10-14';
+        if (entry.date !== yesterdayStr) return false;
+      } else if (filters.dateRange === 'this_week') {
+        // Monday (2026-10-12) to Sunday (2026-10-18)
+        if (entry.date < '2026-10-12' || entry.date > '2026-10-18') return false;
+      } else if (filters.dateRange === 'custom_date' && filters.selectedSpecificDate) {
+        if (entry.date !== filters.selectedSpecificDate) return false;
       }
 
       // Follow-up Filter
@@ -291,7 +291,7 @@ export default function App() {
               </span>
             </div>
             <h2 className="text-base sm:text-lg font-bold tracking-tight">
-              Workload Journal & Activity Tracker
+              Activity Log
             </h2>
             <p className="text-xs text-blue-100/90 mt-1 max-w-2xl leading-relaxed">
               Log activities, monitor weekly completion rates, plan follow-up tasks, and facilitate

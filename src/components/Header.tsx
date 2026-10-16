@@ -85,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                  Workload Journal & Activity Log
+                  Activity Log
                 </h1>
                 <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded font-semibold border border-blue-200">
                   {totalEntriesCount} Logs
