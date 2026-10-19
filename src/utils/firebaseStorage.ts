@@ -7,16 +7,17 @@ import {
   getDocs,
   writeBatch,
   query,
-  orderBy,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { JournalEntry } from '../types/journal';
+import { isSampleActivityId } from './dateUtils';
 
 const COLLECTION_NAME = 'activities';
 
 /**
- * Subscribes to real-time updates from Firestore
+ * Subscribes to real-time updates from Firestore.
+ * Automatically purges any studio sample / demo entries if detected.
  */
 export function subscribeToCloudActivities(
   onUpdate: (entries: JournalEntry[]) => void,
@@ -29,12 +30,22 @@ export function subscribeToCloudActivities(
     q,
     (snapshot) => {
       const items: JournalEntry[] = [];
+      const sampleDocIdsToDelete: string[] = [];
+
       snapshot.forEach((docSnap) => {
+        const docId = docSnap.id;
+
+        // If it is a studio sample activity, mark it for permanent deletion from Cloud
+        if (isSampleActivityId(docId)) {
+          sampleDocIdsToDelete.push(docId);
+          return;
+        }
+
         const data = docSnap.data();
         if (data && data.title) {
           items.push({
-            id: docSnap.id,
-            date: data.date || '2026-10-15',
+            id: docId,
+            date: data.date,
             title: data.title,
             description: data.description || '',
             status: data.status || 'In Progress',
@@ -46,11 +57,20 @@ export function subscribeToCloudActivities(
             principalFeedback: data.principalFeedback || undefined,
             principalApproved: Boolean(data.principalApproved),
             principalApprovedAt: data.principalApprovedAt || undefined,
+            authorEmail: data.authorEmail || 'ovnica@lazuardi.sch.id',
+            authorName: data.authorName || 'Ovnica',
             createdAt: data.createdAt || new Date().toISOString(),
             updatedAt: data.updatedAt || new Date().toISOString(),
           });
         }
       });
+
+      // Asynchronously delete any sample documents from cloud if any were found
+      if (sampleDocIdsToDelete.length > 0) {
+        sampleDocIdsToDelete.forEach((id) => {
+          deleteActivityFromCloud(id).catch(() => {});
+        });
+      }
 
       // Sort by date descending
       items.sort((a, b) => b.date.localeCompare(a.date));
@@ -67,6 +87,9 @@ export function subscribeToCloudActivities(
  * Saves or updates a single activity in Firestore
  */
 export async function saveActivityToCloud(entry: JournalEntry): Promise<void> {
+  if (isSampleActivityId(entry.id)) {
+    return; // Never upload sample entries
+  }
   try {
     const docRef = doc(db, COLLECTION_NAME, entry.id);
     await setDoc(docRef, { ...entry, updatedAt: new Date().toISOString() }, { merge: true });
@@ -90,14 +113,15 @@ export async function deleteActivityFromCloud(entryId: string): Promise<void> {
 }
 
 /**
- * Batch upload existing entries to Firestore if cloud is empty or to force sync
+ * Batch upload existing user entries to Firestore
  */
 export async function syncAllActivitiesToCloud(entries: JournalEntry[]): Promise<boolean> {
   try {
-    if (!entries || entries.length === 0) return true;
+    const userOnly = entries.filter((e) => !isSampleActivityId(e.id));
+    if (!userOnly || userOnly.length === 0) return true;
 
     const batch = writeBatch(db);
-    entries.forEach((entry) => {
+    userOnly.forEach((entry) => {
       const docRef = doc(db, COLLECTION_NAME, entry.id);
       batch.set(docRef, entry, { merge: true });
     });
@@ -111,7 +135,7 @@ export async function syncAllActivitiesToCloud(entries: JournalEntry[]): Promise
 }
 
 /**
- * Fetches one-time snapshot of cloud activities
+ * Fetches one-time snapshot of cloud activities (only genuine user activities)
  */
 export async function getCloudActivitiesOnce(): Promise<JournalEntry[]> {
   try {
@@ -119,11 +143,14 @@ export async function getCloudActivitiesOnce(): Promise<JournalEntry[]> {
     const snap = await getDocs(colRef);
     const items: JournalEntry[] = [];
     snap.forEach((docSnap) => {
+      if (isSampleActivityId(docSnap.id)) {
+        return;
+      }
       const data = docSnap.data();
       if (data && data.title) {
         items.push({
           id: docSnap.id,
-          date: data.date || '2026-10-15',
+          date: data.date,
           title: data.title,
           description: data.description || '',
           status: data.status || 'In Progress',
@@ -135,6 +162,8 @@ export async function getCloudActivitiesOnce(): Promise<JournalEntry[]> {
           principalFeedback: data.principalFeedback || undefined,
           principalApproved: Boolean(data.principalApproved),
           principalApprovedAt: data.principalApprovedAt || undefined,
+          authorEmail: data.authorEmail || 'ovnica@lazuardi.sch.id',
+          authorName: data.authorName || 'Ovnica',
           createdAt: data.createdAt || new Date().toISOString(),
           updatedAt: data.updatedAt || new Date().toISOString(),
         });

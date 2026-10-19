@@ -8,10 +8,13 @@ import {
   ArrowUpDown,
   ShieldCheck,
   CheckSquare,
-  Layers
+  Layers,
+  User,
+  Radio
 } from 'lucide-react';
 import { JournalEntry, UserProfile, EntryStatus } from '../types/journal';
 import { getSmartProgressSummary } from '../utils/analytics';
+import { getTodayDateString } from '../utils/dateUtils';
 
 interface SpreadsheetProps {
   entries: JournalEntry[];
@@ -127,18 +130,21 @@ export const WorkloadSpreadsheet: React.FC<SpreadsheetProps> = ({
       </div>
 
       {sortedEntries.length === 0 ? (
-        <div className="py-16 text-center text-slate-400">
+        <div className="py-16 text-center text-slate-500">
           <Layers className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-          <p className="text-sm font-semibold text-slate-600">No journal entries found</p>
-          <p className="text-xs text-slate-400 mt-1">Try resetting filters or log a new activity.</p>
+          <p className="text-sm font-bold text-slate-700">Belum ada catatan aktivitas yang cocok</p>
+          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            Tidak ada aktivitas pada filter yang dipilih. Silakan ubah filter tanggal atau klik tombol <strong>"Log Activity"</strong> di atas untuk mencatat aktivitas baru.
+          </p>
         </div>
       ) : viewLayout === 'cards' ? (
         /* Card / Tablet Optimized Grid View */
         <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           {sortedEntries.map((entry) => {
             const summary = getSmartProgressSummary(entry);
+            const todayStr = getTodayDateString();
             const isOverdue =
-              entry.followUpDeadline && entry.followUpDeadline < '2026-10-08' && !entry.followUpDone;
+              entry.followUpDeadline && entry.followUpDeadline < todayStr && !entry.followUpDone;
 
             return (
               <div
@@ -280,9 +286,10 @@ export const WorkloadSpreadsheet: React.FC<SpreadsheetProps> = ({
             <tbody className="divide-y divide-slate-200">
               {sortedEntries.map((entry) => {
                 const summary = getSmartProgressSummary(entry);
+                const todayStr = getTodayDateString();
                 const isOverdue =
                   entry.followUpDeadline &&
-                  entry.followUpDeadline < '2026-10-08' &&
+                  entry.followUpDeadline < todayStr &&
                   !entry.followUpDone;
 
                 return (
@@ -306,6 +313,16 @@ export const WorkloadSpreadsheet: React.FC<SpreadsheetProps> = ({
                           {entry.description}
                         </p>
                       )}
+                      <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-500">
+                        <span className="inline-flex items-center gap-1 font-medium bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                          <User className="w-2.5 h-2.5 text-slate-500" />
+                          <span>{entry.authorName || 'Ovnica'} ({entry.authorEmail || 'ovnica@lazuardi.sch.id'})</span>
+                        </span>
+                        <span className="text-emerald-600 flex items-center gap-1 font-medium">
+                          <Radio className="w-2.5 h-2.5 animate-pulse text-emerald-500" />
+                          <span>Tersinkron Cloud</span>
+                        </span>
+                      </div>
                     </td>
 
                     {/* Status & Automated Progress Summary */}

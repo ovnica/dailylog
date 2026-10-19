@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
-import { Search, X, RotateCcw, Calendar, ChevronDown, Check, Sparkles } from 'lucide-react';
+import { Search, X, RotateCcw, Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { EntryStatus, FilterOptions, JournalEntry } from '../types/journal';
 import { VisualCalendarPicker } from './VisualCalendarPicker';
+import {
+  getTodayDateString,
+  getYesterdayDateString,
+  getWeekRange,
+  formatIndonesianDate,
+} from '../utils/dateUtils';
 
 interface FilterBarProps {
   filters: FilterOptions;
@@ -27,6 +33,11 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 }) => {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
+  const todayStr = getTodayDateString();
+  const yesterdayStr = getYesterdayDateString();
+  const defaultCurrentWeek = getWeekRange(new Date(), 0);
+  const activeWeek = getWeekRange(new Date(), filters.weekOffset || 0);
+
   const handleReset = () => {
     setIsCalendarOpen(false);
     setFilters({
@@ -35,6 +46,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       priority: 'all',
       dateRange: 'all',
       selectedSpecificDate: undefined,
+      weekOffset: 0,
       followUpFilter: 'all',
     });
   };
@@ -45,7 +57,14 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       setFilters((prev) => ({
         ...prev,
         dateRange: value,
-        selectedSpecificDate: prev.selectedSpecificDate || '2026-10-15',
+        selectedSpecificDate: prev.selectedSpecificDate || todayStr,
+      }));
+    } else if (value === 'this_week') {
+      setIsCalendarOpen(false);
+      setFilters((prev) => ({
+        ...prev,
+        dateRange: value,
+        weekOffset: 0, // start at current week
       }));
     } else {
       setIsCalendarOpen(false);
@@ -69,38 +88,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     filters.status !== 'all' ||
     filters.priority !== 'all' ||
     filters.dateRange !== 'all' ||
+    (filters.weekOffset && filters.weekOffset !== 0) ||
     filters.followUpFilter !== 'all';
-
-  // Format date for readable display (e.g. 15 Oktober 2026)
-  const formatReadableDate = (dateStr?: string) => {
-    if (!dateStr) return '';
-    try {
-      const parts = dateStr.split('-');
-      if (parts.length === 3) {
-        const year = parts[0];
-        const monthNum = parseInt(parts[1], 10);
-        const day = parseInt(parts[2], 10);
-        const months = [
-          'Januari',
-          'Februari',
-          'Maret',
-          'April',
-          'Mei',
-          'Juni',
-          'Juli',
-          'Agustus',
-          'September',
-          'Oktober',
-          'November',
-          'Desember',
-        ];
-        return `${day} ${months[monthNum - 1]} ${year}`;
-      }
-    } catch (e) {
-      // fallback
-    }
-    return dateStr;
-  };
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs space-y-2.5 relative">
@@ -132,11 +121,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             onChange={(e) => handleDateRangeChange(e.target.value as FilterOptions['dateRange'])}
             className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800 font-semibold cursor-pointer"
           >
-            <option value="all">Record: All Records</option>
-            <option value="this_week">This Week</option>
-            <option value="today">Today</option>
-            <option value="yesterday">Yesterday</option>
-            <option value="custom_date">Pilih Tanggal...</option>
+            <option value="all">Record: All Records (Semua)</option>
+            <option value="this_week">
+              This Week ({defaultCurrentWeek.label})
+            </option>
+            <option value="today">
+              Today ({formatIndonesianDate(todayStr)})
+            </option>
+            <option value="yesterday">
+              Yesterday ({formatIndonesianDate(yesterdayStr)})
+            </option>
+            <option value="custom_date">Pilih Tanggal (Kalender)...</option>
           </select>
         </div>
 
@@ -157,6 +152,89 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         </div>
       </div>
 
+      {/* Dynamic Week Banner when "this_week" is selected */}
+      {filters.dateRange === 'this_week' && (
+        <div className="p-2.5 bg-blue-50/90 border border-blue-200 rounded-lg text-xs space-y-1.5 animate-in fade-in duration-150">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-blue-600 text-white rounded-md shadow-2xs">
+                <Calendar className="w-4 h-4" />
+              </span>
+              <div>
+                <div className="font-semibold text-blue-950 flex items-center gap-1.5">
+                  <span>Rentang Minggu:</span>
+                  <strong className="text-blue-800 bg-white px-2 py-0.5 rounded border border-blue-200 font-bold">
+                    {activeWeek.fullLabel}
+                  </strong>
+                  {(filters.weekOffset || 0) === 0 ? (
+                    <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+                      Minggu Berjalan
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-semibold bg-amber-100 text-amber-900 px-2 py-0.5 rounded">
+                      {(filters.weekOffset || 0) < 0
+                        ? `${Math.abs(filters.weekOffset || 0)} minggu lalu`
+                        : `${filters.weekOffset} minggu depan`}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-blue-700/80">
+                  Ditemukan <strong>{totalFilteredCount}</strong> aktivitas pada minggu ini
+                </div>
+              </div>
+            </div>
+
+            {/* Week navigation buttons */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    weekOffset: (prev.weekOffset || 0) - 1,
+                  }))
+                }
+                className="px-2.5 py-1 text-xs font-semibold bg-white hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+                title="Lihat minggu sebelumnya"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Minggu Sebelumnya</span>
+              </button>
+
+              {(filters.weekOffset || 0) !== 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      weekOffset: 0,
+                    }))
+                  }
+                  className="px-2.5 py-1 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors cursor-pointer"
+                >
+                  Kembali ke Minggu Ini
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    weekOffset: (prev.weekOffset || 0) + 1,
+                  }))
+                }
+                className="px-2.5 py-1 text-xs font-semibold bg-white hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+                title="Lihat minggu berikutnya"
+              >
+                <span>Minggu Berikutnya</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Banner / Controller for "Pilih Tanggal" */}
       {filters.dateRange === 'custom_date' && (
         <div className="p-2.5 bg-blue-50/80 border border-blue-200 rounded-lg text-xs space-y-2 animate-in fade-in duration-150">
@@ -169,7 +247,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 <div className="font-semibold text-blue-950 flex items-center gap-1.5">
                   <span>Tanggal Terpilih:</span>
                   <strong className="text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200 font-bold">
-                    {formatReadableDate(filters.selectedSpecificDate)}
+                    {formatIndonesianDate(filters.selectedSpecificDate, true)}
                   </strong>
                 </div>
                 <div className="text-[11px] text-blue-700/80">
@@ -200,7 +278,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           {isCalendarOpen && (
             <div className="pt-2 flex justify-center sm:justify-start">
               <VisualCalendarPicker
-                selectedDate={filters.selectedSpecificDate || '2026-10-15'}
+                selectedDate={filters.selectedSpecificDate || todayStr}
                 onSelectDate={handleSelectSpecificDate}
                 allEntries={allEntries}
                 onClose={() => setIsCalendarOpen(false)}

@@ -33,7 +33,7 @@ export const DashboardAnalytics: React.FC<DashboardProps> = ({
   onToggleFollowupDone,
   onQuickApprove,
 }) => {
-  const weeklyStats: WeeklyStats = calculateWeeklyStats(entries, selectedWeekOffset, '2026-10-08');
+  const weeklyStats: WeeklyStats = calculateWeeklyStats(entries, selectedWeekOffset);
 
   // Overall statistics
   const allCompleted = entries.filter((e) => e.status === 'Completed' || e.progressPercent === 100).length;

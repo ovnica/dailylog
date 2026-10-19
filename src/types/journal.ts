@@ -8,10 +8,10 @@ export type EntryStatus =
 
 export type PriorityLevel = 'High' | 'Medium' | 'Normal' | 'Low';
 
-export type UserPersona = 'ovnica' | 'sari' | 'viewer';
+export type UserPersona = 'ovnica' | 'sari' | 'reza' | 'guru' | string;
 
 export interface UserProfile {
-  id: UserPersona;
+  id: string;
   name: string;
   email: string;
   roleTitle: string;
@@ -35,6 +35,8 @@ export interface JournalEntry {
   principalFeedback?: string;
   principalApproved?: boolean;
   principalApprovedAt?: string;
+  authorEmail?: string;
+  authorName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -45,5 +47,6 @@ export interface FilterOptions {
   priority: string;
   dateRange: 'all' | 'this_week' | 'today' | 'yesterday' | 'custom_date';
   selectedSpecificDate?: string; // for "pilih tanggal"
+  weekOffset?: number; // 0 = current week, -1 = previous week, +1 = next week
   followUpFilter: 'all' | 'has_followup' | 'pending_followup' | 'completed_followup';
 }

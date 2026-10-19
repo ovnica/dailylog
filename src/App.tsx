@@ -22,7 +22,7 @@ import {
   saveStoredEntries,
   getActiveUser,
   setActiveUser,
-  resetToSeedEntries,
+  clearAllStoredEntries,
 } from './utils/storage';
 import {
   subscribeToCloudActivities,
@@ -30,13 +30,20 @@ import {
   deleteActivityFromCloud,
   syncAllActivitiesToCloud,
 } from './utils/firebaseStorage';
+import {
+  getTodayDateString,
+  getYesterdayDateString,
+  getWeekRange,
+  isSampleActivityId,
+} from './utils/dateUtils';
 import { decodeEntriesFromUrl } from './utils/shareUrl';
 import { exportWorkloadCSV } from './utils/pdfExport';
 import {
   CheckCircle2,
   Plus,
   RotateCcw,
-  Info
+  Info,
+  Trash2,
 } from 'lucide-react';
 
 export default function App() {
@@ -45,7 +52,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'spreadsheet' | 'dashboard' | 'split'>('spreadsheet');
   const [selectedWeekOffset, setSelectedWeekOffset] = useState<number>(0);
 
-  // Sync state simulation
+  // Sync state
   const [syncTimestamp, setSyncTimestamp] = useState<string>('Just now');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' } | null>(
@@ -58,27 +65,49 @@ export default function App() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-  // Simplified filter state (no tags, no category)
+  // Simplified filter state
   const [filters, setFilters] = useState<FilterOptions>({
     search: '',
     status: 'all',
     priority: 'all',
     dateRange: 'all',
+    weekOffset: 0,
     followUpFilter: 'all',
   });
 
-  // Handle Real-time Firestore Database Synchronization on mount
+  // Handle Real-time Firestore Database Synchronization and URL user on mount
   useEffect(() => {
-    // 1. Check if the URL contains shared activity entries
+    // 1. Detect if user parameter is set in URL (e.g. ?user=sari or ?email=sari@lazuardi.sch.id)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const userParam = params.get('user') || params.get('email');
+      if (userParam) {
+        const user = setActiveUser(userParam);
+        setCurrentUser(user);
+        if (user.id === 'sari' || user.email.toLowerCase() === 'sari@lazuardi.sch.id') {
+          showToast(
+            'Selamat datang Ibu Sari! Akses Kepala Sekolah (Persetujuan & Telaah) aktif.',
+            'info'
+          );
+        } else {
+          showToast(`Masuk sebagai ${user.name} (${user.email})`, 'info');
+        }
+      }
+    }
+
+    // 2. Check if the URL contains shared activity entries
     const sharedFromUrl = decodeEntriesFromUrl();
     if (sharedFromUrl && sharedFromUrl.length > 0) {
-      setEntries(sharedFromUrl);
-      saveStoredEntries(sharedFromUrl);
-      syncAllActivitiesToCloud(sharedFromUrl);
-      showToast(
-        `Memuat ${sharedFromUrl.length} catatan aktivitas dari tautan dan menyinkronkan ke Cloud!`,
-        'success'
-      );
+      const cleanShared = sharedFromUrl.filter((e) => !isSampleActivityId(e.id));
+      if (cleanShared.length > 0) {
+        setEntries(cleanShared);
+        saveStoredEntries(cleanShared);
+        syncAllActivitiesToCloud(cleanShared);
+        showToast(
+          `Memuat ${cleanShared.length} catatan aktivitas dari tautan dan menyinkronkan ke Cloud!`,
+          'success'
+        );
+      }
       try {
         const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
         window.history.replaceState(null, '', cleanUrl);
@@ -87,24 +116,28 @@ export default function App() {
       }
     }
 
-    // 2. Subscribe to real-time Cloud Firestore updates
+    // 3. Subscribe to real-time Cloud Firestore updates
     const unsubscribe = subscribeToCloudActivities(
       (cloudEntries) => {
-        if (cloudEntries && cloudEntries.length > 0) {
-          setEntries(cloudEntries);
-          saveStoredEntries(cloudEntries);
-          setSyncTimestamp(
-            new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-          );
+        // Filter out any studio sample entries strictly
+        const userEntries = (cloudEntries || []).filter((e) => !isSampleActivityId(e.id));
+        if (userEntries.length > 0) {
+          setEntries(userEntries);
+          saveStoredEntries(userEntries);
         } else {
-          // If cloud is initially empty, push Ovnica's existing local activities up to the cloud!
-          const localEntries = getStoredEntries();
-          if (localEntries && localEntries.length > 0) {
-            syncAllActivitiesToCloud(localEntries).then(() => {
-              setEntries(localEntries);
-            });
+          // If cloud has 0 entries, check if local storage has genuine user entries that need to be uploaded!
+          const local = getStoredEntries();
+          const cleanLocal = local.filter((e) => !isSampleActivityId(e.id));
+          if (cleanLocal.length > 0) {
+            syncAllActivitiesToCloud(cleanLocal);
+            setEntries(cleanLocal);
+          } else {
+            setEntries([]);
           }
         }
+        setSyncTimestamp(
+          new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        );
       },
       (err) => {
         console.warn('Firestore offline fallback:', err);
@@ -116,7 +149,7 @@ export default function App() {
     };
   }, []);
 
-  // Persist entries to local backup on change
+  // Persist genuine entries to local backup on change
   useEffect(() => {
     saveStoredEntries(entries);
   }, [entries]);
@@ -134,16 +167,16 @@ export default function App() {
     await syncAllActivitiesToCloud(entries);
     setIsSyncing(false);
     setSyncTimestamp(
-      new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     );
     showToast('Tersinkronisasi langsung dengan Cloud Firestore Lazuardi!', 'success');
   };
 
-  const handleSwitchUser = (userId: string) => {
-    const user = setActiveUser(userId);
+  const handleSwitchUser = (userIdOrEmail: string, customName?: string) => {
+    const user = setActiveUser(userIdOrEmail, customName);
     setCurrentUser(user);
     showToast(
-      `Switched active collaborator to ${user.name} (${user.email})`,
+      `Pengguna aktif beralih ke: ${user.name} (${user.email})`,
       'info'
     );
   };
@@ -159,33 +192,69 @@ export default function App() {
   };
 
   const handleSaveEntry = async (entry: JournalEntry) => {
+    const entryWithAuthor: JournalEntry = {
+      ...entry,
+      authorEmail: entry.authorEmail || currentUser.email,
+      authorName: entry.authorName || currentUser.name,
+      updatedAt: new Date().toISOString(),
+    };
+
     if (editingEntry) {
-      setEntries((prev) => prev.map((e) => (e.id === entry.id ? entry : e)));
-      showToast(`Perubahan aktivitas "${entry.title}" disimpan ke Cloud`, 'success');
+      setEntries((prev) => prev.map((e) => (e.id === entryWithAuthor.id ? entryWithAuthor : e)));
+      showToast(`Perubahan "${entryWithAuthor.title}" disimpan ke Cloud Firestore`, 'success');
     } else {
-      setEntries((prev) => [entry, ...prev]);
-      showToast(`Aktivitas baru "${entry.title}" berhasil dicatat ke Cloud`, 'success');
+      setEntries((prev) => [entryWithAuthor, ...prev]);
+      showToast(`Aktivitas baru "${entryWithAuthor.title}" dicatat ke Cloud Firestore`, 'success');
     }
     setIsEntryModalOpen(false);
     setEditingEntry(null);
 
     // Persist directly to Cloud Firestore
-    await saveActivityToCloud(entry);
+    try {
+      await saveActivityToCloud(entryWithAuthor);
+      setSyncTimestamp(
+        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
+    } catch (err) {
+      console.error('Failed to sync activity to Firestore:', err);
+    }
   };
 
   const handleDeleteEntry = async (id: string) => {
     const target = entries.find((e) => e.id === id);
     if (window.confirm(`Hapus aktivitas "${target?.title || 'ini'}" dari database cloud?`)) {
       setEntries((prev) => prev.filter((e) => e.id !== id));
-      showToast('Aktivitas dihapus dari ledger', 'info');
+      showToast('Aktivitas dihapus dari ledger dan Cloud', 'info');
       await deleteActivityFromCloud(id);
+      setSyncTimestamp(
+        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
+    }
+  };
+
+  const handleClearAllEntries = async () => {
+    if (entries.length === 0) {
+      showToast('Tidak ada catatan aktivitas untuk dihapus.', 'info');
+      return;
+    }
+    if (window.confirm('Yakin ingin menghapus seluruh catatan aktivitas? Tindakan ini akan mengosongkan ledger di semua perangkat.')) {
+      const idsToDelete = entries.map((e) => e.id);
+      setEntries([]);
+      clearAllStoredEntries();
+      for (const id of idsToDelete) {
+        await deleteActivityFromCloud(id).catch(() => {});
+      }
+      showToast('Seluruh aktivitas telah berhasil dibersihkan dari Cloud.', 'info');
+      setSyncTimestamp(
+        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
     }
   };
 
   const handleQuickUpdateStatus = async (id: string, status: EntryStatus, progress: number) => {
     const target = entries.find((e) => e.id === id);
     if (target) {
-      const updated = {
+      const updated: JournalEntry = {
         ...target,
         status,
         progressPercent: progress,
@@ -193,6 +262,9 @@ export default function App() {
       };
       setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
       await saveActivityToCloud(updated);
+      setSyncTimestamp(
+        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
     }
   };
 
@@ -200,7 +272,7 @@ export default function App() {
     const target = entries.find((e) => e.id === id);
     if (target) {
       const newState = !target.followUpDone;
-      const updated = {
+      const updated: JournalEntry = {
         ...target,
         followUpDone: newState,
         updatedAt: new Date().toISOString(),
@@ -208,11 +280,14 @@ export default function App() {
       setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
       showToast(
         newState
-          ? `Tindak lanjut ditandai selesai untuk "${target.title}"`
-          : `Tindak lanjut dibuka kembali untuk "${target.title}"`,
+          ? `Tindak lanjut ditandai selesai untuk "${target.title}" (Tersinkron Cloud)`
+          : `Tindak lanjut dibuka kembali untuk "${target.title}" (Tersinkron Cloud)`,
         'success'
       );
       await saveActivityToCloud(updated);
+      setSyncTimestamp(
+        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
     }
   };
 
@@ -225,26 +300,24 @@ export default function App() {
         principalApprovedAt: new Date().toISOString(),
         status: 'Approved by Principal',
         progressPercent: 100,
-        principalFeedback: feedback || target.principalFeedback || 'Endorsed by Principal Ibu Sari.',
+        principalFeedback: feedback || target.principalFeedback || `Disetujui secara resmi oleh Kepala Sekolah (${currentUser.name}).`,
         updatedAt: new Date().toISOString(),
       };
       setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
-      showToast(`Persetujuan & endorsement resmi Kepala Sekolah berhasil dicatat untuk "${target.title}"`, 'success');
+      showToast(`Persetujuan & endorsement resmi Kepala Sekolah berhasil dicatat untuk "${target.title}" dan tersinkron ke semua akun`, 'success');
       await saveActivityToCloud(updated);
+      setSyncTimestamp(
+        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
     }
   };
 
-  const handleResetData = () => {
-    if (window.confirm('Reset journal back to initial Lazuardi faculty seed dataset?')) {
-      const reset = resetToSeedEntries();
-      setEntries(reset);
-      showToast('Reset to original sample data', 'info');
-    }
-  };
-
-  // Filtered entries computation (simplified: search, date, status, priority, follow-up)
+  // Filtered entries computation with dynamic dates & week bounds
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
+      // Exclude any studio mock data
+      if (isSampleActivityId(entry.id)) return false;
+
       // Search filter
       if (filters.search) {
         const query = filters.search.toLowerCase();
@@ -266,14 +339,14 @@ export default function App() {
 
       // Date Range filter: all records, this week, today, yesterday, atau pilih tanggal
       if (filters.dateRange === 'today') {
-        const todayStr = '2026-10-15';
+        const todayStr = getTodayDateString();
         if (entry.date !== todayStr) return false;
       } else if (filters.dateRange === 'yesterday') {
-        const yesterdayStr = '2026-10-14';
+        const yesterdayStr = getYesterdayDateString();
         if (entry.date !== yesterdayStr) return false;
       } else if (filters.dateRange === 'this_week') {
-        // Monday (2026-10-12) to Sunday (2026-10-18)
-        if (entry.date < '2026-10-12' || entry.date > '2026-10-18') return false;
+        const weekBounds = getWeekRange(new Date(), filters.weekOffset || 0);
+        if (entry.date < weekBounds.start || entry.date > weekBounds.end) return false;
       } else if (filters.dateRange === 'custom_date' && filters.selectedSpecificDate) {
         if (entry.date !== filters.selectedSpecificDate) return false;
       }
@@ -345,7 +418,7 @@ export default function App() {
               </span>
             </div>
             <h2 className="text-base sm:text-lg font-bold tracking-tight">
-              Activity Log
+              Activity log
             </h2>
             <p className="text-xs text-blue-100/90 mt-1 max-w-2xl leading-relaxed">
               Log activities, monitor weekly completion rates, plan follow-up tasks, and facilitate
@@ -455,21 +528,22 @@ export default function App() {
               onClick={() => {
                 const recovered = getStoredEntries();
                 setEntries(recovered);
-                showToast(`Riwayat aktivitas berhasil dipulihkan (${recovered.length} entri ditemukan).`, 'success');
+                showToast(`Riwayat input aktivitas berhasil dipulihkan (${recovered.length} entri ditemukan).`, 'success');
               }}
               className="text-blue-600 hover:text-blue-800 flex items-center gap-1 font-semibold hover:underline cursor-pointer"
-              title="Pulihkan entri aktivitas sebelumnya dari memori peramban"
+              title="Pulihkan entri aktivitas Anda dari memori peramban"
             >
               <RotateCcw className="w-3 h-3 text-blue-600" />
-              <span>Pulihkan Riwayat Input</span>
+              <span>Pulihkan Riwayat Input Saya</span>
             </button>
             <span className="text-slate-300">|</span>
             <button
-              onClick={handleResetData}
-              className="text-slate-500 hover:text-slate-800 flex items-center gap-1 hover:underline cursor-pointer"
+              onClick={handleClearAllEntries}
+              className="text-slate-400 hover:text-rose-600 flex items-center gap-1 hover:underline cursor-pointer transition-colors"
+              title="Hapus seluruh catatan aktivitas"
             >
-              <RotateCcw className="w-3 h-3" />
-              <span>Reset Sample Data</span>
+              <Trash2 className="w-3 h-3" />
+              <span>Kosongkan Seluruh Ledger</span>
             </button>
           </div>
         </div>

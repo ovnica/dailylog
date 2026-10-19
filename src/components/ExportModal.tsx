@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { JournalEntry, UserProfile } from '../types/journal';
 import { exportWorkloadReportPDF, exportWorkloadCSV } from '../utils/pdfExport';
+import { getWeekRange, getTodayDateString } from '../utils/dateUtils';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -28,13 +29,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   if (!isOpen) return null;
 
+  const currentWeek = getWeekRange(new Date(), 0);
+  const currentMonthPrefix = getTodayDateString().slice(0, 7);
+
   // Filter entries based on selected scope
   const filteredEntries = entries.filter((entry) => {
     if (reportScope === 'this_week') {
-      return entry.date >= '2026-10-05' && entry.date <= '2026-10-11';
+      return entry.date >= currentWeek.start && entry.date <= currentWeek.end;
     }
     if (reportScope === 'this_month') {
-      return entry.date.startsWith('2026-10');
+      return entry.date.startsWith(currentMonthPrefix);
     }
     return true;
   });
@@ -57,10 +61,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         principalEmail: 'sari@lazuardi.sch.id',
         dateRangeLabel:
           reportScope === 'this_week'
-            ? 'Oct 5 – Oct 11, 2026 (Week 4 Evaluation)'
+            ? `${currentWeek.fullLabel} (Weekly Evaluation)`
             : reportScope === 'this_month'
-            ? 'October 2026 (Mid-Term Evaluation)'
-            : 'Academic Term 1 (Complete Activity Ledger)',
+            ? `Monthly Activity Report (${currentMonthPrefix})`
+            : 'Complete Cumulative Activity Ledger',
       });
       setIsExporting(false);
       onClose();

@@ -1,4 +1,5 @@
 import { JournalEntry } from '../types/journal';
+import { formatDate, getTodayDateString, formatIndonesianDate } from './dateUtils';
 
 export interface WeeklyStats {
   weekLabel: string;
@@ -14,16 +15,8 @@ export interface WeeklyStats {
   overdueFollowupCount: number;
 }
 
-// Returns YYYY-MM-DD
-function formatDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 export function getWeekBounds(referenceDateStr?: string, weekOffset: number = 0): { start: Date; end: Date; label: string } {
-  const base = referenceDateStr ? new Date(referenceDateStr) : new Date('2026-10-15');
+  const base = referenceDateStr ? new Date(referenceDateStr) : new Date();
   base.setDate(base.getDate() + weekOffset * 7);
 
   // Determine Monday as start of academic week
@@ -37,8 +30,8 @@ export function getWeekBounds(referenceDateStr?: string, weekOffset: number = 0)
   sunday.setDate(monday.getDate() + 6);
   sunday.setHours(23, 59, 59, 999);
 
-  const startFormatted = monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const endFormatted = sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const startFormatted = formatIndonesianDate(formatDate(monday));
+  const endFormatted = formatIndonesianDate(formatDate(sunday));
 
   return {
     start: monday,
@@ -50,9 +43,10 @@ export function getWeekBounds(referenceDateStr?: string, weekOffset: number = 0)
 export function calculateWeeklyStats(
   entries: JournalEntry[],
   weekOffset: number = 0,
-  referenceDateStr: string = '2026-10-15'
+  referenceDateStr?: string
 ): WeeklyStats {
-  const { start, end, label } = getWeekBounds(referenceDateStr, weekOffset);
+  const ref = referenceDateStr || getTodayDateString();
+  const { start, end, label } = getWeekBounds(ref, weekOffset);
   const startStr = formatDate(start);
   const endStr = formatDate(end);
 
@@ -69,7 +63,7 @@ export function calculateWeeklyStats(
   const completionRate = totalEntries > 0 ? Math.round((completedEntries / totalEntries) * 100) : 0;
 
   // Daily activity distribution Monday - Sunday
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
   const dailyActivities = days.map((dayName, idx) => {
     const dayDate = new Date(start);
     dayDate.setDate(start.getDate() + idx);
@@ -89,7 +83,7 @@ export function calculateWeeklyStats(
 
   const principalApprovedCount = weekEntries.filter((e) => e.principalApproved).length;
 
-  const todayStr = '2026-10-15';
+  const todayStr = getTodayDateString();
   const pendingFollowupCount = weekEntries.filter((e) => e.followUpPlan && !e.followUpDone).length;
   const overdueFollowupCount = weekEntries.filter(
     (e) => e.followUpPlan && !e.followUpDone && e.followUpDeadline && e.followUpDeadline < todayStr
@@ -115,7 +109,7 @@ export function getSmartProgressSummary(entry: JournalEntry): {
   badgeClass: string;
   isAttentionNeeded: boolean;
 } {
-  const todayStr = '2026-10-15';
+  const todayStr = getTodayDateString();
 
   if (entry.principalApproved) {
     return {

@@ -12,6 +12,7 @@ import {
   PriorityLevel,
   UserProfile,
 } from '../types/journal';
+import { getTodayDateString } from '../utils/dateUtils';
 
 interface EntryModalProps {
   isOpen: boolean;
@@ -30,7 +31,7 @@ export const EntryModal: React.FC<EntryModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState('2026-10-08');
+  const [date, setDate] = useState(() => getTodayDateString());
   const [status, setStatus] = useState<EntryStatus>('In Progress');
   const [progressPercent, setProgressPercent] = useState(50);
   const [priority, setPriority] = useState<PriorityLevel>('Normal');
@@ -57,9 +58,9 @@ export const EntryModal: React.FC<EntryModalProps> = ({
       // Defaults for new entry
       setTitle('');
       setDescription('');
-      setDate('2026-10-08');
-      setStatus('Completed');
-      setProgressPercent(100);
+      setDate(getTodayDateString());
+      setStatus('In Progress');
+      setProgressPercent(50);
       setPriority('Normal');
       setFollowUpPlan('');
       setFollowUpDeadline('');
@@ -85,7 +86,9 @@ export const EntryModal: React.FC<EntryModalProps> = ({
     if (!title.trim()) return;
 
     const entryToSave: JournalEntry = {
-      id: editingEntry ? editingEntry.id : `LZ-2026-${String(Math.floor(Math.random() * 900) + 100)}`,
+      id: editingEntry
+        ? editingEntry.id
+        : `USR-${Date.now().toString(36)}-${Math.floor(Math.random() * 900) + 100}`,
       date,
       title: title.trim(),
       description: description.trim(),
@@ -100,6 +103,8 @@ export const EntryModal: React.FC<EntryModalProps> = ({
       principalApprovedAt: principalApproved
         ? editingEntry?.principalApprovedAt || new Date().toISOString()
         : undefined,
+      authorEmail: editingEntry?.authorEmail || currentUser.email,
+      authorName: editingEntry?.authorName || currentUser.name,
       createdAt: editingEntry ? editingEntry.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

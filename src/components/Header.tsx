@@ -1,25 +1,24 @@
 import React, { useState } from 'react';
 import {
-  BookOpen,
   Share2,
   FileDown,
   Plus,
   RefreshCw,
-  UserCheck,
   CheckCircle2,
-  Mail,
-  SlidersHorizontal,
   ChevronDown,
   Layers,
   LayoutDashboard,
-  Table as TableIcon
+  Table as TableIcon,
+  ShieldCheck,
+  UserPlus,
+  Radio
 } from 'lucide-react';
 import { UserProfile } from '../types/journal';
-import { USER_PROFILES } from '../utils/storage';
+import { USER_PROFILES, createUserProfileFromEmail } from '../utils/storage';
 
 interface HeaderProps {
   currentUser: UserProfile;
-  onSwitchUser: (userId: string) => void;
+  onSwitchUser: (userIdOrEmail: string, customName?: string) => void;
   onOpenNewModal: () => void;
   onOpenShareModal: () => void;
   onExportPDF: () => void;
@@ -48,29 +47,57 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [customEmail, setCustomEmail] = useState('');
+  const [customName, setCustomName] = useState('');
+  const [showCustomForm, setShowCustomForm] = useState(false);
+
+  const handleCustomLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customEmail.trim()) return;
+    const finalEmail = customEmail.includes('@')
+      ? customEmail.trim()
+      : `${customEmail.trim()}@lazuardi.sch.id`;
+    onSwitchUser(finalEmail, customName.trim() || undefined);
+    setCustomEmail('');
+    setCustomName('');
+    setShowCustomForm(false);
+    setShowUserDropdown(false);
+  };
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-      {/* Top Academic Banner */}
+      {/* Top Academic Banner with Live Sync Status */}
       <div className="bg-slate-900 text-slate-100 text-xs px-4 sm:px-6 py-1.5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800">
         <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="font-medium tracking-wide">LAZUARDI ISLAMIC GLOBAL SCHOOL</span>
-          <span className="hidden sm:inline text-slate-400">| Faculty Academic Workload Portal</span>
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          </span>
+          <span className="font-semibold tracking-wide text-[11px] sm:text-xs">
+            LAZUARDI ISLAMIC GLOBAL SCHOOL
+          </span>
+          <span className="hidden md:inline text-slate-400">|</span>
+          <span className="hidden md:inline text-emerald-400 font-medium text-[11px] flex items-center gap-1">
+            <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
+            <span>Cloud Firestore Real-time Sync Aktif (@lazuardi.sch.id)</span>
+          </span>
         </div>
-        <div className="flex items-center gap-4 text-slate-300 text-xs">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={onTriggerSync}
-              className="flex items-center gap-1 text-slate-300 hover:text-white transition-colors cursor-pointer"
-              title="Click to force cloud sync"
-            >
-              <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-blue-400' : 'text-slate-400'}`} />
-              <span>Synced: {syncTimestamp}</span>
-            </button>
-          </div>
-          <span className="hidden md:inline text-slate-500">•</span>
-          <span className="hidden md:inline text-slate-300">Term 1 • Academic Year 2026/2027</span>
+
+        <div className="flex items-center gap-3 sm:gap-4 text-slate-300 text-xs">
+          <button
+            onClick={onTriggerSync}
+            className="flex items-center gap-1.5 text-slate-300 hover:text-white transition-colors cursor-pointer text-[11px]"
+            title="Klik untuk menyinkronkan ulang data langsung dengan Firestore"
+          >
+            <RefreshCw
+              className={`w-3 h-3 ${isSyncing ? 'animate-spin text-blue-400' : 'text-emerald-400'}`}
+            />
+            <span>Sinkron: {syncTimestamp}</span>
+          </button>
+          <span className="hidden sm:inline text-slate-500">•</span>
+          <span className="hidden sm:inline text-slate-300 text-[11px]">
+            Tahun Ajaran 2026/2027
+          </span>
         </div>
       </div>
 
@@ -88,14 +115,21 @@ export const Header: React.FC<HeaderProps> = ({
                   Activity Log
                 </h1>
                 <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded font-semibold border border-blue-200">
-                  {totalEntriesCount} Logs
+                  {totalEntriesCount} Catatan
                 </span>
+                {currentUser.canApprove && (
+                  <span className="bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded font-semibold border border-indigo-200 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-indigo-600" />
+                    <span>Akses Kepala Sekolah</span>
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
-                <span>Spreadsheet tracking for</span>
-                <strong className="text-slate-700 font-medium">ovnica@lazuardi.sch.id</strong>
-                <span>• Principal review by</span>
-                <strong className="text-slate-700 font-medium">sari@lazuardi.sch.id</strong>
+              <p className="text-xs text-slate-500 flex flex-wrap items-center gap-1 mt-0.5">
+                <span>Akun Aktif:</span>
+                <strong className="text-slate-800 font-semibold">{currentUser.name}</strong>
+                <span className="text-slate-400">({currentUser.email})</span>
+                <span className="text-slate-300">•</span>
+                <span className="text-blue-700 font-medium">Terhubung ke Cloud Firestore</span>
               </p>
             </div>
           </div>
@@ -111,7 +145,7 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-white text-blue-700 shadow-xs font-semibold'
                     : 'hover:text-slate-900 text-slate-600'
                 }`}
-                title="Spreadsheet tabular view"
+                title="Tampilan Lembar Kerja / Spreadsheet"
               >
                 <TableIcon className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Spreadsheet</span>
@@ -123,10 +157,10 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-white text-blue-700 shadow-xs font-semibold'
                     : 'hover:text-slate-900 text-slate-600'
                 }`}
-                title="Analytics and weekly completion rates"
+                title="Ringkasan Analitik & Persentase Selesai"
               >
                 <LayoutDashboard className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Analytics</span>
+                <span className="hidden sm:inline">Analitik</span>
               </button>
               <button
                 onClick={() => setActiveTab('split')}
@@ -135,7 +169,7 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-white text-blue-700 shadow-xs font-semibold'
                     : 'hover:text-slate-900 text-slate-600'
                 }`}
-                title="Split view (Dashboard + Spreadsheet)"
+                title="Tampilan Ganda (Analitik + Spreadsheet)"
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>Split View</span>
@@ -145,8 +179,8 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Share / Access Link */}
             <button
               onClick={onOpenShareModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg shadow-2xs transition-colors"
-              title="Share link & manage access"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+              title="Bagikan Tautan ke Bu Sari atau Akun @lazuardi.sch.id"
             >
               <Share2 className="w-3.5 h-3.5 text-blue-600" />
               <span>Share Link</span>
@@ -156,7 +190,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="relative">
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg shadow-2xs transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
               >
                 <FileDown className="w-3.5 h-3.5 text-slate-600" />
                 <span>Export Report</span>
@@ -172,7 +206,7 @@ export const Header: React.FC<HeaderProps> = ({
                         setShowExportMenu(false);
                         onExportPDF();
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-blue-50 text-slate-800 flex items-center justify-between group"
+                      className="w-full text-left px-3.5 py-2 hover:bg-blue-50 text-slate-800 flex items-center justify-between group cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-rose-500"></span>
@@ -185,7 +219,7 @@ export const Header: React.FC<HeaderProps> = ({
                         setShowExportMenu(false);
                         onExportCSV();
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-slate-50 text-slate-700 flex items-center justify-between"
+                      className="w-full text-left px-3.5 py-2 hover:bg-slate-50 text-slate-700 flex items-center justify-between cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -198,11 +232,11 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
-            {/* User Persona Switcher */}
+            {/* User Persona Switcher & @lazuardi.sch.id Account Selector */}
             <div className="relative">
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 transition-colors"
+                className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 transition-colors cursor-pointer"
               >
                 <div
                   className={`w-5 h-5 rounded-full ${currentUser.avatarBg} text-white flex items-center justify-center text-[10px] font-bold`}
@@ -214,7 +248,7 @@ export const Header: React.FC<HeaderProps> = ({
                     {currentUser.name}
                   </div>
                   <div className="text-[10px] text-slate-500 leading-tight">
-                    {currentUser.id === 'sari' ? 'Principal (Editor)' : currentUser.id === 'ovnica' ? 'Teacher / Owner' : 'Viewer'}
+                    {currentUser.canApprove ? 'Kepala Sekolah (Approval)' : 'Guru / Lead Sains'}
                   </div>
                 </div>
                 <ChevronDown className="w-3 h-3 text-slate-400" />
@@ -223,40 +257,97 @@ export const Header: React.FC<HeaderProps> = ({
               {showUserDropdown && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowUserDropdown(false)} />
-                  <div className="absolute right-0 mt-1.5 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 z-50">
-                    <div className="px-3 py-1.5 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      Collaborative Identity Switcher
+                  <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 z-50">
+                    <div className="px-3.5 py-1.5 border-b border-slate-100 flex items-center justify-between text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                      <span>Pilih Akun @lazuardi.sch.id</span>
+                      <span className="text-emerald-600 font-bold lowercase">realtime sync</span>
                     </div>
-                    {Object.values(USER_PROFILES).map((user) => (
-                      <button
-                        key={user.id}
-                        onClick={() => {
-                          onSwitchUser(user.id);
-                          setShowUserDropdown(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2.5 transition-colors ${
-                          currentUser.id === user.id ? 'bg-blue-50 text-blue-900' : 'hover:bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        <div
-                          className={`w-6 h-6 rounded-full ${user.avatarBg} text-white flex items-center justify-center text-xs font-bold shrink-0`}
+
+                    <div className="max-h-60 overflow-y-auto">
+                      {Object.values(USER_PROFILES).map((user) => (
+                        <button
+                          key={user.id}
+                          onClick={() => {
+                            onSwitchUser(user.id);
+                            setShowUserDropdown(false);
+                          }}
+                          className={`w-full text-left px-3.5 py-2 text-xs flex items-center gap-2.5 transition-colors cursor-pointer ${
+                            currentUser.email.toLowerCase() === user.email.toLowerCase()
+                              ? 'bg-blue-50 text-blue-900'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          }`}
                         >
-                          {user.avatarInitials}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-slate-900 flex items-center gap-1.5 truncate">
-                            {user.name}
-                            {currentUser.id === user.id && (
-                              <CheckCircle2 className="w-3 h-3 text-blue-600 shrink-0" />
-                            )}
+                          <div
+                            className={`w-7 h-7 rounded-full ${user.avatarBg} text-white flex items-center justify-center text-xs font-bold shrink-0`}
+                          >
+                            {user.avatarInitials}
                           </div>
-                          <div className="text-[11px] text-slate-500 truncate">{user.email}</div>
-                          <div className="text-[10px] text-blue-600 font-medium">{user.roleTitle}</div>
-                        </div>
-                      </button>
-                    ))}
-                    <div className="px-3 py-2 border-t border-slate-100 bg-slate-50/70 text-[11px] text-slate-500 leading-relaxed">
-                      💡 Anyone with the link has access. Switch to <strong>Ibu Sari</strong> to test principal approvals & comments.
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-slate-900 flex items-center gap-1.5 truncate">
+                              {user.name}
+                              {currentUser.email.toLowerCase() === user.email.toLowerCase() && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 truncate">{user.email}</div>
+                            <div className="text-[10px] text-blue-600 font-medium">
+                              {user.roleTitle}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Custom @lazuardi.sch.id Login Section */}
+                    <div className="p-3 border-t border-slate-100 bg-slate-50/70">
+                      {!showCustomForm ? (
+                        <button
+                          onClick={() => setShowCustomForm(true)}
+                          className="w-full py-1.5 px-2.5 text-xs text-blue-700 font-medium bg-blue-50 hover:bg-blue-100/80 rounded-lg border border-blue-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Gunakan Akun @lazuardi.sch.id Lain</span>
+                        </button>
+                      ) : (
+                        <form onSubmit={handleCustomLogin} className="space-y-2">
+                          <div className="text-[11px] font-semibold text-slate-700">
+                            Masuk dengan Email Lazuardi:
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Nama Lengkap (opsional)"
+                            value={customName}
+                            onChange={(e) => setCustomName(e.target.value)}
+                            className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
+                          />
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              required
+                              placeholder="nama (atau nama@lazuardi.sch.id)"
+                              value={customEmail}
+                              onChange={(e) => setCustomEmail(e.target.value)}
+                              className="flex-1 text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
+                            />
+                            <button
+                              type="submit"
+                              className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold cursor-pointer"
+                            >
+                              Masuk
+                            </button>
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            Otomatis terdaftar dengan hak akses kolaboratif real-time.
+                          </div>
+                        </form>
+                      )}
+                    </div>
+
+                    <div className="px-3.5 py-2 border-t border-slate-100 bg-blue-50/50 text-[11px] text-slate-600 leading-relaxed">
+                      💡 <strong>Sinkronisasi Instan:</strong> Setiap perubahan langsung disimpan ke
+                      Cloud Firestore sehingga otomatis terlihat oleh Bu Sari (
+                      <span className="text-blue-700 font-medium">sari@lazuardi.sch.id</span>) dan
+                      seluruh rekan di domain <span className="font-medium">@lazuardi.sch.id</span>.
                     </div>
                   </div>
                 </>

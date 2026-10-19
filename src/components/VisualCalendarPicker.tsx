@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Check } from 'lucide-react';
 import { JournalEntry } from '../types/journal';
+import { getTodayDateString, getYesterdayDateString } from '../utils/dateUtils';
 
 interface VisualCalendarPickerProps {
   selectedDate: string; // YYYY-MM-DD
@@ -15,13 +16,21 @@ export const VisualCalendarPicker: React.FC<VisualCalendarPickerProps> = ({
   allEntries,
   onClose,
 }) => {
-  // Parse selected date or fallback to 2026-10-15
-  const initialDate = selectedDate ? new Date(selectedDate) : new Date('2026-10-15');
+  const todayStr = getTodayDateString();
+  const yesterdayStr = getYesterdayDateString();
+
+  const parseDateOrDefault = (str?: string) => {
+    if (!str) return new Date();
+    const parts = str.split('-');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    return new Date();
+  };
+
+  const initialDate = parseDateOrDefault(selectedDate || todayStr);
   const [viewYear, setViewYear] = useState<number>(initialDate.getFullYear());
   const [viewMonth, setViewMonth] = useState<number>(initialDate.getMonth()); // 0-11
-
-  const todayStr = '2026-10-15';
-  const yesterdayStr = '2026-10-14';
 
   // Count entries per date
   const entryCountMap = React.useMemo(() => {
@@ -170,7 +179,7 @@ export const VisualCalendarPicker: React.FC<VisualCalendarPickerProps> = ({
               {/* Indicator dot for days with activities */}
               {hasActivities && (
                 <span
-                  className={`w-1 h-1 rounded-full mt-0.5 ${
+                  className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
                     isSelected ? 'bg-white' : 'bg-blue-500'
                   }`}
                   title={`${activityCount} aktivitas tercatat`}
@@ -187,8 +196,9 @@ export const VisualCalendarPicker: React.FC<VisualCalendarPickerProps> = ({
           <button
             type="button"
             onClick={() => {
-              setViewYear(2026);
-              setViewMonth(9); // October
+              const now = new Date();
+              setViewYear(now.getFullYear());
+              setViewMonth(now.getMonth());
               onSelectDate(todayStr);
               if (onClose) onClose();
             }}
@@ -199,8 +209,10 @@ export const VisualCalendarPicker: React.FC<VisualCalendarPickerProps> = ({
           <button
             type="button"
             onClick={() => {
-              setViewYear(2026);
-              setViewMonth(9);
+              const prev = new Date();
+              prev.setDate(prev.getDate() - 1);
+              setViewYear(prev.getFullYear());
+              setViewMonth(prev.getMonth());
               onSelectDate(yesterdayStr);
               if (onClose) onClose();
             }}
