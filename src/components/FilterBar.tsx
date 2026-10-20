@@ -36,7 +36,16 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   const todayStr = getTodayDateString();
   const yesterdayStr = getYesterdayDateString();
   const defaultCurrentWeek = getWeekRange(new Date(), 0);
+  const lastWeek = getWeekRange(new Date(), -1);
   const activeWeek = getWeekRange(new Date(), filters.weekOffset || 0);
+
+  // Quick activity counts for previewing in selectors
+  const currentWeekEntriesCount = allEntries.filter(
+    (e) => e.date >= defaultCurrentWeek.start && e.date <= defaultCurrentWeek.end
+  ).length;
+  const lastWeekEntriesCount = allEntries.filter(
+    (e) => e.date >= lastWeek.start && e.date <= lastWeek.end
+  ).length;
 
   const handleReset = () => {
     setIsCalendarOpen(false);
@@ -64,7 +73,14 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       setFilters((prev) => ({
         ...prev,
         dateRange: value,
-        weekOffset: 0, // start at current week
+        weekOffset: 0, // current week
+      }));
+    } else if (value === 'last_week') {
+      setIsCalendarOpen(false);
+      setFilters((prev) => ({
+        ...prev,
+        dateRange: value,
+        weekOffset: -1, // previous week
       }));
     } else {
       setIsCalendarOpen(false);
@@ -121,15 +137,18 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             onChange={(e) => handleDateRangeChange(e.target.value as FilterOptions['dateRange'])}
             className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800 font-semibold cursor-pointer"
           >
-            <option value="all">Record: All Records (Semua)</option>
+            <option value="all">Record: Semua Aktivitas ({allEntries.length} Catatan)</option>
             <option value="this_week">
-              This Week ({defaultCurrentWeek.label})
+              Pekan Ini ({defaultCurrentWeek.label}) {currentWeekEntriesCount > 0 ? `(${currentWeekEntriesCount})` : ''}
+            </option>
+            <option value="last_week">
+              Pekan Lalu ({lastWeek.label}) {lastWeekEntriesCount > 0 ? `(${lastWeekEntriesCount} aktivitas)` : ''}
             </option>
             <option value="today">
-              Today ({formatIndonesianDate(todayStr)})
+              Hari Ini ({formatIndonesianDate(todayStr)})
             </option>
             <option value="yesterday">
-              Yesterday ({formatIndonesianDate(yesterdayStr)})
+              Kemarin ({formatIndonesianDate(yesterdayStr)})
             </option>
             <option value="custom_date">Pilih Tanggal (Kalender)...</option>
           </select>
@@ -152,9 +171,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         </div>
       </div>
 
-      {/* Dynamic Week Banner when "this_week" is selected */}
-      {filters.dateRange === 'this_week' && (
-        <div className="p-2.5 bg-blue-50/90 border border-blue-200 rounded-lg text-xs space-y-1.5 animate-in fade-in duration-150">
+      {/* Dynamic Week Banner when "this_week" or "last_week" is selected */}
+      {(filters.dateRange === 'this_week' || filters.dateRange === 'last_week') && (
+        <div className="p-2.5 bg-blue-50/90 border border-blue-200 rounded-lg text-xs space-y-2 animate-in fade-in duration-150">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="p-1.5 bg-blue-600 text-white rounded-md shadow-2xs">
@@ -169,6 +188,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                   {(filters.weekOffset || 0) === 0 ? (
                     <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
                       Minggu Berjalan
+                    </span>
+                  ) : (filters.weekOffset || 0) === -1 ? (
+                    <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded">
+                      Pekan Lalu (Terbaru)
                     </span>
                   ) : (
                     <span className="text-[10px] font-semibold bg-amber-100 text-amber-900 px-2 py-0.5 rounded">
@@ -207,12 +230,13 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                   onClick={() =>
                     setFilters((prev) => ({
                       ...prev,
+                      dateRange: 'this_week',
                       weekOffset: 0,
                     }))
                   }
                   className="px-2.5 py-1 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors cursor-pointer"
                 >
-                  Kembali ke Minggu Ini
+                  Ke Minggu Ini
                 </button>
               )}
 
@@ -232,6 +256,29 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Prompt if current viewed week is empty but last week has entries */}
+          {totalFilteredCount === 0 && lastWeekEntriesCount > 0 && (filters.weekOffset || 0) === 0 && (
+            <div className="pt-1.5 border-t border-blue-200/70 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="text-slate-700">
+                Belum ada aktivitas di minggu berjalan ini ({defaultCurrentWeek.label}). Catatan Anda tersimpan di pekan lalu ({lastWeek.label}).
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    dateRange: 'last_week',
+                    weekOffset: -1,
+                  }))
+                }
+                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-md shadow-2xs transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+              >
+                <span>Buka Pekan Lalu ({lastWeek.label})</span>
+                <span className="bg-blue-800 text-[10px] px-1.5 py-0.2 rounded-full">{lastWeekEntriesCount}</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 

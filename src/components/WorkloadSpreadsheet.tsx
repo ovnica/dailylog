@@ -24,6 +24,8 @@ interface SpreadsheetProps {
   onQuickUpdateStatus: (id: string, status: EntryStatus, progress: number) => void;
   onToggleFollowupDone: (id: string) => void;
   onPrincipalApprove: (id: string, feedback?: string) => void;
+  onAddNewEntry?: () => void;
+  onScanBackup?: () => void;
 }
 
 type SortField = 'date' | 'title' | 'progressPercent' | 'status';
@@ -37,6 +39,8 @@ export const WorkloadSpreadsheet: React.FC<SpreadsheetProps> = ({
   onQuickUpdateStatus,
   onToggleFollowupDone,
   onPrincipalApprove,
+  onAddNewEntry,
+  onScanBackup,
 }) => {
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
@@ -130,12 +134,33 @@ export const WorkloadSpreadsheet: React.FC<SpreadsheetProps> = ({
       </div>
 
       {sortedEntries.length === 0 ? (
-        <div className="py-16 text-center text-slate-500">
-          <Layers className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-          <p className="text-sm font-bold text-slate-700">Belum ada catatan aktivitas yang cocok</p>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            Tidak ada aktivitas pada filter yang dipilih. Silakan ubah filter tanggal atau klik tombol <strong>"Log Activity"</strong> di atas untuk mencatat aktivitas baru.
+        <div className="py-14 px-4 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+            <Layers className="w-6 h-6" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-800">Tidak Ada Catatan Contoh Studio</h3>
+          <p className="text-xs text-slate-500 mt-1.5 max-w-md mx-auto leading-relaxed">
+            Seluruh catatan sample template dari Studio telah dibersihkan sepenuhnya. Halaman ini hanya menampilkan catatan aktivitas asli yang Anda input.
           </p>
+          <div className="mt-5 flex items-center justify-center gap-2.5">
+            {onAddNewEntry && (
+              <button
+                onClick={onAddNewEntry}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                + Catat Aktivitas Baru
+              </button>
+            )}
+            {onScanBackup && (
+              <button
+                onClick={onScanBackup}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Pindai cache/cadangan lokal di browser ini"
+              >
+                🔄 Pindai Cadangan Browser
+              </button>
+            )}
+          </div>
         </div>
       ) : viewLayout === 'cards' ? (
         /* Card / Tablet Optimized Grid View */

@@ -1,5 +1,6 @@
 import { JournalEntry, UserProfile } from '../types/journal';
-import { isSampleActivityId } from './dateUtils';
+import { isSampleActivityId, isSampleActivityEntry } from './dateUtils';
+import { INITIAL_JOURNAL_ENTRIES } from '../data/initialEntries';
 
 export const USER_PROFILES: Record<string, UserProfile> = {
   ovnica: {
@@ -55,12 +56,14 @@ export const USER_PROFILES: Record<string, UserProfile> = {
 };
 
 const PRIMARY_STORAGE_KEY = 'lazuardi_activity_log_v5';
+const USER_BACKUP_KEY = 'lazuardi_user_activities_backup';
 const HISTORICAL_STORAGE_KEYS = [
   'lazuardi_activity_log_v5',
   'lazuardi_activity_log_v4',
   'lazuardi_workload_journal_v3_simple',
   'lazuardi_workload_journal_v2',
   'lazuardi_workload_journal',
+  'lazuardi_user_activities_backup',
 ];
 const ACTIVE_USER_KEY = 'lazuardi_active_user_persona';
 
@@ -108,56 +111,119 @@ export function createUserProfileFromEmail(email: string, customName?: string): 
 }
 
 /**
- * Retrieves ONLY genuine user-inputted entries from local storage.
+ * Parses and validates an item into a JournalEntry, or returns null if it is a studio sample or invalid.
+ * Supports Indonesian field aliases from earlier versions (kegiatan, catatan, deskripsi, tindakLanjut).
+ */
+function parseCleanEntry(item: any): JournalEntry | null {
+  if (!item || typeof item !== 'object') return null;
+  const rawTitle = item.title || item.kegiatan || item.activity || item.task || item.name;
+  if (!rawTitle || typeof rawTitle !== 'string') return null;
+
+  if (isSampleActivityId(item.id) || isSampleActivityEntry({ id: item.id, title: rawTitle })) {
+    return null; // strictly exclude studio samples
+  }
+
+  const rawDate =
+    item.date ||
+    item.tanggal ||
+    (item.createdAt ? String(item.createdAt).split('T')[0] : new Date().toISOString().split('T')[0]);
+  const rawDesc = item.description || item.deskripsi || item.catatan || item.keterangan || '';
+  const rawFollowUp = item.followUpPlan || item.tindakLanjut || item.followUp || '';
+
+  return {
+    id: String(item.id || `USR-${Date.now().toString(36)}-${Math.floor(Math.random() * 900) + 100}`),
+    date: String(rawDate),
+    title: String(rawTitle).trim(),
+    description: String(rawDesc).trim(),
+    status: item.status || 'In Progress',
+    progressPercent: typeof item.progressPercent === 'number' ? item.progressPercent : 50,
+    followUpPlan: String(rawFollowUp).trim(),
+    followUpDeadline: item.followUpDeadline ? String(item.followUpDeadline) : undefined,
+    followUpDone: Boolean(item.followUpDone),
+    priority: item.priority || 'Normal',
+    principalFeedback: item.principalFeedback ? String(item.principalFeedback) : undefined,
+    principalApproved: Boolean(item.principalApproved),
+    principalApprovedAt: item.principalApprovedAt ? String(item.principalApprovedAt) : undefined,
+    authorEmail: item.authorEmail || 'ovnica@lazuardi.sch.id',
+    authorName: item.authorName || 'Ovnica',
+    createdAt: item.createdAt || new Date().toISOString(),
+    updatedAt: item.updatedAt || new Date().toISOString(),
+  };
+}
+
+/**
+ * Retrieves ONLY genuine user-inputted entries from local storage and session storage.
  * Completely strips out any studio sample/demo activities so they never re-appear.
  */
 export function getStoredEntries(): JournalEntry[] {
   try {
     const entryMap = new Map<string, JournalEntry>();
 
-    // Scan storage keys from oldest to newest, but strictly filter out sample activities
-    HISTORICAL_STORAGE_KEYS.forEach((key) => {
-      try {
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((item: any) => {
-              if (item && item.id && item.title) {
-                // If it is a studio sample activity, completely ignore and skip it
-                if (isSampleActivityId(item.id)) {
-                  return;
+    if (typeof window !== 'undefined') {
+      // 1. Scan known historical storage keys
+      HISTORICAL_STORAGE_KEYS.forEach((key) => {
+        try {
+          const raw = window.localStorage?.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((item: any) => {
+                const clean = parseCleanEntry(item);
+                if (clean) {
+                  entryMap.set(clean.id, clean);
                 }
-
-                const cleanEntry: JournalEntry = {
-                  id: String(item.id),
-                  date: String(item.date),
-                  title: String(item.title),
-                  description: String(item.description || ''),
-                  status: item.status || 'In Progress',
-                  progressPercent: typeof item.progressPercent === 'number' ? item.progressPercent : 50,
-                  followUpPlan: String(item.followUpPlan || ''),
-                  followUpDeadline: item.followUpDeadline ? String(item.followUpDeadline) : undefined,
-                  followUpDone: Boolean(item.followUpDone),
-                  priority: item.priority || 'Normal',
-                  principalFeedback: item.principalFeedback ? String(item.principalFeedback) : undefined,
-                  principalApproved: Boolean(item.principalApproved),
-                  principalApprovedAt: item.principalApprovedAt ? String(item.principalApprovedAt) : undefined,
-                  authorEmail: item.authorEmail || 'ovnica@lazuardi.sch.id',
-                  authorName: item.authorName || 'Ovnica',
-                  createdAt: item.createdAt || new Date().toISOString(),
-                  updatedAt: item.updatedAt || new Date().toISOString(),
-                };
-
-                entryMap.set(cleanEntry.id, cleanEntry);
-              }
-            });
+              });
+            }
           }
+        } catch (e) {}
+      });
+
+      // 2. Deep scan any remaining keys in localStorage
+      if (window.localStorage) {
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const key = window.localStorage.key(i);
+          if (!key || HISTORICAL_STORAGE_KEYS.includes(key)) continue;
+          try {
+            const raw = window.localStorage.getItem(key);
+            if (raw && (raw.startsWith('[') || raw.startsWith('{'))) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                parsed.forEach((item: any) => {
+                  const clean = parseCleanEntry(item);
+                  if (clean) entryMap.set(clean.id, clean);
+                });
+              } else if (parsed && parsed.title && parsed.date) {
+                const clean = parseCleanEntry(parsed);
+                if (clean) entryMap.set(clean.id, clean);
+              }
+            }
+          } catch (e) {}
         }
-      } catch (keyErr) {
-        // skip corrupted key
       }
-    });
+
+      // 3. Scan sessionStorage for any unsaved user input drafts
+      if (window.sessionStorage) {
+        for (let i = 0; i < window.sessionStorage.length; i++) {
+          const key = window.sessionStorage.key(i);
+          if (!key) continue;
+          try {
+            const raw = window.sessionStorage.getItem(key);
+            if (raw && (raw.startsWith('[') || raw.startsWith('{'))) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                parsed.forEach((item: any) => {
+                  const clean = parseCleanEntry(item);
+                  if (clean) entryMap.set(clean.id, clean);
+                });
+              }
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    // Purge studio samples from localStorage immediately
+    purgeSampleEntriesFromStorage();
 
     const userEntries = Array.from(entryMap.values()).sort((a, b) => {
       return b.date.localeCompare(a.date);
@@ -171,16 +237,42 @@ export function getStoredEntries(): JournalEntry[] {
 }
 
 /**
+ * Cleans out any studio sample entries from all browser localStorage keys.
+ */
+export function purgeSampleEntriesFromStorage(): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    HISTORICAL_STORAGE_KEYS.forEach((key) => {
+      const raw = window.localStorage.getItem(key);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter((item) => {
+              if (!item) return false;
+              return !isSampleActivityId(item.id) && !isSampleActivityEntry(item);
+            });
+            if (filtered.length !== parsed.length) {
+              window.localStorage.setItem(key, JSON.stringify(filtered));
+            }
+          }
+        } catch (e) {}
+      }
+    });
+  } catch (e) {}
+}
+
+/**
  * Saves genuine user entries to storage.
  */
 export function saveStoredEntries(entries: JournalEntry[]): void {
   try {
-    // Ensure zero sample entries ever get stored
-    const userOnly = entries.filter((e) => !isSampleActivityId(e.id));
-    const serialized = JSON.stringify(userOnly);
+    const cleanEntries = entries.filter((e) => !isSampleActivityId(e.id) && !isSampleActivityEntry(e));
+    const serialized = JSON.stringify(cleanEntries);
     localStorage.setItem(PRIMARY_STORAGE_KEY, serialized);
+    localStorage.setItem(USER_BACKUP_KEY, serialized);
 
-    // Keep legacy keys updated without sample entries
+    // Keep legacy keys updated
     HISTORICAL_STORAGE_KEYS.forEach((k) => {
       if (k !== PRIMARY_STORAGE_KEY) {
         localStorage.setItem(k, serialized);

@@ -1,4 +1,5 @@
 import { JournalEntry } from '../types/journal';
+import { isSampleActivityEntry } from './dateUtils';
 
 /**
  * Encodes journal entries into a clean URL-safe base64 string
@@ -90,7 +91,8 @@ export function decodeEntriesFromUrl(): JournalEntry[] | null {
         updatedAt: item.u || item.updatedAt || new Date().toISOString(),
       }));
 
-      return restored;
+      const cleanRestored = restored.filter((e) => !isSampleActivityEntry(e));
+      return cleanRestored.length > 0 ? cleanRestored : null;
     }
   } catch (err) {
     console.warn('Could not decode entries from URL', err);

@@ -35,6 +35,7 @@ import {
   getYesterdayDateString,
   getWeekRange,
   isSampleActivityId,
+  isSampleActivityEntry,
 } from './utils/dateUtils';
 import { decodeEntriesFromUrl } from './utils/shareUrl';
 import { exportWorkloadCSV } from './utils/pdfExport';
@@ -98,16 +99,13 @@ export default function App() {
     // 2. Check if the URL contains shared activity entries
     const sharedFromUrl = decodeEntriesFromUrl();
     if (sharedFromUrl && sharedFromUrl.length > 0) {
-      const cleanShared = sharedFromUrl.filter((e) => !isSampleActivityId(e.id));
-      if (cleanShared.length > 0) {
-        setEntries(cleanShared);
-        saveStoredEntries(cleanShared);
-        syncAllActivitiesToCloud(cleanShared);
-        showToast(
-          `Memuat ${cleanShared.length} catatan aktivitas dari tautan dan menyinkronkan ke Cloud!`,
-          'success'
-        );
-      }
+      setEntries(sharedFromUrl);
+      saveStoredEntries(sharedFromUrl);
+      syncAllActivitiesToCloud(sharedFromUrl);
+      showToast(
+        `Memuat ${sharedFromUrl.length} catatan aktivitas dari tautan dan menyinkronkan ke Cloud!`,
+        'success'
+      );
       try {
         const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
         window.history.replaceState(null, '', cleanUrl);
@@ -119,18 +117,20 @@ export default function App() {
     // 3. Subscribe to real-time Cloud Firestore updates
     const unsubscribe = subscribeToCloudActivities(
       (cloudEntries) => {
-        // Filter out any studio sample entries strictly
-        const userEntries = (cloudEntries || []).filter((e) => !isSampleActivityId(e.id));
-        if (userEntries.length > 0) {
-          setEntries(userEntries);
-          saveStoredEntries(userEntries);
+        const cleanCloud = (cloudEntries || []).filter(
+          (e) => !isSampleActivityId(e.id) && !isSampleActivityEntry(e)
+        );
+        if (cleanCloud.length > 0) {
+          setEntries(cleanCloud);
+          saveStoredEntries(cleanCloud);
         } else {
-          // If cloud has 0 entries, check if local storage has genuine user entries that need to be uploaded!
-          const local = getStoredEntries();
-          const cleanLocal = local.filter((e) => !isSampleActivityId(e.id));
-          if (cleanLocal.length > 0) {
-            syncAllActivitiesToCloud(cleanLocal);
-            setEntries(cleanLocal);
+          // If cloud has 0 entries, check local storage
+          const local = getStoredEntries().filter(
+            (e) => !isSampleActivityId(e.id) && !isSampleActivityEntry(e)
+          );
+          if (local.length > 0) {
+            syncAllActivitiesToCloud(local);
+            setEntries(local);
           } else {
             setEntries([]);
           }
@@ -251,6 +251,18 @@ export default function App() {
     }
   };
 
+  const handleScanBackup = () => {
+    const recovered = getStoredEntries();
+    if (recovered.length > 0) {
+      setEntries(recovered);
+      saveStoredEntries(recovered);
+      syncAllActivitiesToCloud(recovered);
+      showToast(`Berhasil menemukan & memulihkan ${recovered.length} catatan aktivitas Anda!`, 'success');
+    } else {
+      showToast('Tidak ada data catatan tersimpan di cache lokal browser ini. Silakan input aktivitas baru.', 'info');
+    }
+  };
+
   const handleQuickUpdateStatus = async (id: string, status: EntryStatus, progress: number) => {
     const target = entries.find((e) => e.id === id);
     if (target) {
@@ -315,9 +327,6 @@ export default function App() {
   // Filtered entries computation with dynamic dates & week bounds
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
-      // Exclude any studio mock data
-      if (isSampleActivityId(entry.id)) return false;
-
       // Search filter
       if (filters.search) {
         const query = filters.search.toLowerCase();
@@ -346,6 +355,9 @@ export default function App() {
         if (entry.date !== yesterdayStr) return false;
       } else if (filters.dateRange === 'this_week') {
         const weekBounds = getWeekRange(new Date(), filters.weekOffset || 0);
+        if (entry.date < weekBounds.start || entry.date > weekBounds.end) return false;
+      } else if (filters.dateRange === 'last_week') {
+        const weekBounds = getWeekRange(new Date(), typeof filters.weekOffset === 'number' ? filters.weekOffset : -1);
         if (entry.date < weekBounds.start || entry.date > weekBounds.end) return false;
       } else if (filters.dateRange === 'custom_date' && filters.selectedSpecificDate) {
         if (entry.date !== filters.selectedSpecificDate) return false;
@@ -471,6 +483,8 @@ export default function App() {
               onQuickUpdateStatus={handleQuickUpdateStatus}
               onToggleFollowupDone={handleToggleFollowupDone}
               onPrincipalApprove={handlePrincipalApprove}
+              onAddNewEntry={handleOpenNewModal}
+              onScanBackup={handleScanBackup}
             />
           </div>
         )}
@@ -501,6 +515,8 @@ export default function App() {
                   onQuickUpdateStatus={handleQuickUpdateStatus}
                   onToggleFollowupDone={handleToggleFollowupDone}
                   onPrincipalApprove={handlePrincipalApprove}
+                  onAddNewEntry={handleOpenNewModal}
+                  onScanBackup={handleScanBackup}
                 />
               </div>
             </div>

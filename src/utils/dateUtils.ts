@@ -98,17 +98,26 @@ export function isDateInCurrentWeek(dateStr: string, refDate: Date = new Date(),
   return dateStr >= start && dateStr <= end;
 }
 
-// Known sample activity IDs from initial demo templates
-export const KNOWN_SAMPLE_ACTIVITY_IDS = new Set([
-  'AL-2026-010',
-  'AL-2026-011',
-  'AL-2026-012',
-  'AL-2026-013',
-  'AL-2026-014',
-  'AL-2026-015',
-  'AL-2026-016',
-  'AL-2026-017',
-  'AL-2026-018',
+// Known sample activity IDs from Studio templates that should be excluded
+export const KNOWN_SAMPLE_ACTIVITY_IDS = new Set<string>([
+  'ACT-LZ-001',
+  'ACT-LZ-002',
+  'ACT-LZ-003',
+  'ACT-LZ-004',
+  'ACT-LZ-005',
+  'ACT-LZ-006',
+  'ACT-LZ-007',
+  'ACT-LZ-008',
+  'ACT-LZ-009',
+  'ACT-2026-010',
+  'ACT-2026-011',
+  'ACT-2026-012',
+  'ACT-2026-013',
+  'ACT-2026-014',
+  'ACT-2026-015',
+  'ACT-2026-016',
+  'ACT-2026-017',
+  'ACT-2026-018',
   'LZ-2026-001',
   'LZ-2026-002',
   'LZ-2026-003',
@@ -120,14 +129,56 @@ export const KNOWN_SAMPLE_ACTIVITY_IDS = new Set([
   'LZ-2026-009',
 ]);
 
+export const KNOWN_SAMPLE_TITLES = [
+  'Grade 8 Science Practical Lab',
+  'Science Fair Booth Equipment',
+  'Mid-Semester Summative Assessment',
+  'Weekly Department Coordination with Principal Sari',
+  'Pastoral Advisory & Student Character Development',
+  'Grading Formative Quizzes & Diagnostic Feedback',
+  'School Accreditation & Digital Portfolio',
+  'Professional Learning Community (PLC)',
+  'Extracurricular Robotics & Young Scientist Club Coaching',
+  'Photosynthesis & Chloroplast',
+  'Cellular Respiration',
+  'Young Scientist Club',
+  'Science Fair Booth',
+];
+
 /**
- * Checks whether an activity ID belongs to the initial Studio mock / sample data.
+ * Checks whether an activity ID is a Studio sample dummy template.
+ * Studio samples return true.
+ * Real user entries return false.
  */
 export function isSampleActivityId(id?: string): boolean {
   if (!id) return false;
   if (KNOWN_SAMPLE_ACTIVITY_IDS.has(id)) return true;
-  if (id.startsWith('AL-2026-')) return true;
-  if (id.startsWith('LZ-2026-')) return true;
-  if (id.startsWith('DEMO-')) return true;
+  if (
+    id.startsWith('studio-sample') ||
+    id.startsWith('sample-') ||
+    id.startsWith('ACT-LZ-') ||
+    id.startsWith('LZ-2026-')
+  ) {
+    return true;
+  }
   return false;
 }
+
+/**
+ * Checks whether an entry is a synthetic Studio sample based on ID or known sample title.
+ */
+export function isSampleActivityEntry(entry?: { id?: string; title?: string } | null): boolean {
+  if (!entry) return false;
+  if (entry.id && isSampleActivityId(entry.id)) return true;
+  if (entry.title) {
+    const lower = entry.title.toLowerCase();
+    for (const sampleTitle of KNOWN_SAMPLE_TITLES) {
+      if (lower.includes(sampleTitle.toLowerCase())) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+

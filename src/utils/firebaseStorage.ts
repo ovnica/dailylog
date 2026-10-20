@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { JournalEntry } from '../types/journal';
-import { isSampleActivityId } from './dateUtils';
+import { isSampleActivityId, isSampleActivityEntry } from './dateUtils';
 
 const COLLECTION_NAME = 'activities';
 
@@ -30,18 +30,17 @@ export function subscribeToCloudActivities(
     q,
     (snapshot) => {
       const items: JournalEntry[] = [];
-      const sampleDocIdsToDelete: string[] = [];
 
       snapshot.forEach((docSnap) => {
         const docId = docSnap.id;
-
-        // If it is a studio sample activity, mark it for permanent deletion from Cloud
-        if (isSampleActivityId(docId)) {
-          sampleDocIdsToDelete.push(docId);
+        const data = docSnap.data();
+        if (
+          isSampleActivityId(docId) ||
+          isSampleActivityEntry({ id: docId, title: data?.title })
+        ) {
+          deleteDoc(docSnap.ref).catch(() => {});
           return;
         }
-
-        const data = docSnap.data();
         if (data && data.title) {
           items.push({
             id: docId,
@@ -65,13 +64,6 @@ export function subscribeToCloudActivities(
         }
       });
 
-      // Asynchronously delete any sample documents from cloud if any were found
-      if (sampleDocIdsToDelete.length > 0) {
-        sampleDocIdsToDelete.forEach((id) => {
-          deleteActivityFromCloud(id).catch(() => {});
-        });
-      }
-
       // Sort by date descending
       items.sort((a, b) => b.date.localeCompare(a.date));
       onUpdate(items);
@@ -87,9 +79,6 @@ export function subscribeToCloudActivities(
  * Saves or updates a single activity in Firestore
  */
 export async function saveActivityToCloud(entry: JournalEntry): Promise<void> {
-  if (isSampleActivityId(entry.id)) {
-    return; // Never upload sample entries
-  }
   try {
     const docRef = doc(db, COLLECTION_NAME, entry.id);
     await setDoc(docRef, { ...entry, updatedAt: new Date().toISOString() }, { merge: true });
@@ -117,15 +106,13 @@ export async function deleteActivityFromCloud(entryId: string): Promise<void> {
  */
 export async function syncAllActivitiesToCloud(entries: JournalEntry[]): Promise<boolean> {
   try {
-    const userOnly = entries.filter((e) => !isSampleActivityId(e.id));
-    if (!userOnly || userOnly.length === 0) return true;
+    if (!entries || entries.length === 0) return true;
 
     const batch = writeBatch(db);
-    userOnly.forEach((entry) => {
+    entries.forEach((entry) => {
       const docRef = doc(db, COLLECTION_NAME, entry.id);
-      batch.set(docRef, entry, { merge: true });
+      batch.set(docRef, { ...entry, updatedAt: new Date().toISOString() }, { merge: true });
     });
-
     await batch.commit();
     return true;
   } catch (err) {
@@ -133,6 +120,7 @@ export async function syncAllActivitiesToCloud(entries: JournalEntry[]): Promise
     return false;
   }
 }
+
 
 /**
  * Fetches one-time snapshot of cloud activities (only genuine user activities)
@@ -143,10 +131,13 @@ export async function getCloudActivitiesOnce(): Promise<JournalEntry[]> {
     const snap = await getDocs(colRef);
     const items: JournalEntry[] = [];
     snap.forEach((docSnap) => {
-      if (isSampleActivityId(docSnap.id)) {
+      const data = docSnap.data();
+      if (
+        isSampleActivityId(docSnap.id) ||
+        isSampleActivityEntry({ id: docSnap.id, title: data?.title })
+      ) {
         return;
       }
-      const data = docSnap.data();
       if (data && data.title) {
         items.push({
           id: docSnap.id,

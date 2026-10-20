@@ -45,7 +45,7 @@ export interface FilterOptions {
   search: string;
   status: string;
   priority: string;
-  dateRange: 'all' | 'this_week' | 'today' | 'yesterday' | 'custom_date';
+  dateRange: 'all' | 'this_week' | 'last_week' | 'today' | 'yesterday' | 'custom_date';
   selectedSpecificDate?: string; // for "pilih tanggal"
   weekOffset?: number; // 0 = current week, -1 = previous week, +1 = next week
   followUpFilter: 'all' | 'has_followup' | 'pending_followup' | 'completed_followup';
